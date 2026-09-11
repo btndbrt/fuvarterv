@@ -39,6 +39,7 @@ Unless a record says otherwise, the decision is **still in force**.
 | [ADR-26](#adr-26--vitest-and-jsdom-tests-against-the-real-modules) | Tests | testing |
 | [ADR-27](#adr-27--an-error-boundary-inside-the-shell) | Error boundary | resilience |
 | [ADR-28](#adr-28--one-stylesheet-os-driven-dark-mode) | One stylesheet | UI |
+| [ADR-29](#adr-29--empty-running-costs-money) | Empty running | optimisation |
 
 ---
 
@@ -274,7 +275,16 @@ all: if there is no time, the spans overlap, so it is one shift with the waiting
 With no depot configured, the span equals the tasks' own, which is exactly the arithmetic
 used before depots existed (principle E8).
 
-**Where.** `spanOf`, `mergeShifts`, `driverPay`, `onSiteWait`.
+**Where.** `spanOf`, `mergeShifts`, `driverPay`, `onSiteWait`, `groupByShift`.
+
+**Amended by ADR-29.** Waiting is paid and going home is not, so on its own this rule
+made any trip home that physically fitted look like a saving. Empty running now costs
+money, which is what keeps a pointless one off the plan.
+
+**One grouping, one answer.** Everything that asks "which runs are one turn-out" goes
+through `groupByShift`: the driver's sheet, the schedule's chain cards, and the
+empty-running charge. The schedule screen once derived its depot times per chain
+instead, and drew a bus arriving at the depot after it had already left again.
 
 ## ADR-15 — Hard constraints, and exactly one soft term
 
@@ -460,3 +470,43 @@ the operating system.
 
 **Still open.** 146 inline style objects remain and should migrate into classes over time.
 See `ACTION_PLAN.md` P1-2.
+
+## ADR-29 — Empty running costs money
+
+**Context.** Cost was wages plus a call-out fee per shift. Driving an empty bus was free,
+and a shift is measured depot to depot (ADR-14), so waiting between two runs is paid while
+going home is not. The optimizer read that exactly as written: given a venue 22 minutes
+from the depot and a two-hour training, it dropped the children off, drove the bus home,
+parked it for 96 minutes and drove back — 44 empty minutes to avoid paying for the wait.
+Cheaper on the spreadsheet, and not something any club would do.
+
+**Decision.** Empty minutes are charged, at `runCostPerMin` forint each. The charge covers
+the depot run that opens a shift and the one that closes it, the deadheads between two
+runs inside a shift, and the deadheads inside a chain. It is levied in `driverPay`, the
+one function every cost in the app is built from.
+
+**Consequence.** The trade is now honest wherever it is made, the assignment search and
+the improvement loop included, with no separate rule about when a driver may go home. A
+long trip home stops paying for itself; a short one still pays, which is the behaviour to
+keep. At the default of 100 the far venue above stays out and waits, while a venue eight
+minutes away still sends the bus home between the two runs.
+
+**This is not a soft term**, so ADR-15 still holds: it is real money, weighed against real
+money, not a bias tuned to nudge the search. The golden rule there applies all the same,
+and it is satisfied for free — `skelCost` prices skeleton chains through `driverPay`.
+
+**Rejected.** A minimum-break rule ("only go home if you get 60 minutes there"). Simpler,
+but it answers the wrong question. What makes a trip home worthwhile is how far it is
+against how long the break is, and a fixed threshold on one of those two cannot tell a
+five-minute hop from a 40-minute haul.
+
+**Rejected.** Pricing by the kilometre. More natural for fuel, but the deadhead matrix
+holds durations only, so it would mean a second OSRM annotation and a migration of every
+stored matrix (ADR-19) to change one number into another that tracks it closely.
+
+**Calibration.** 0 restores the old free-mileage arithmetic exactly, and the tests pin
+that down. The default of 100 HUF per minute is about 120 HUF per empty kilometre at a
+50 km/h average: fuel plus tyres and wear, not a full cost-per-kilometre with depreciation.
+
+**Where.** `emptyRunMin`, `driverPay`, `homeTripMin`, `dayStats`, and the chaining edge
+cost in `optimizeDay`.

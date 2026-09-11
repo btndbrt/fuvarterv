@@ -777,8 +777,14 @@ driver-shift saves a second call-out.
 This is modelled as **minimum-cost flow on a bipartite graph**:
 - One node per task on each side.
 - An edge A→B exists if `A.end + deadhead(A.to, B.from) <= B.start` (B can follow A).
-- Edge cost = `gap_minutes × average_wage_per_minute − calloutFee`. A big gap is
-  costly (idle paid time); avoiding a call-out is a saving.
+- Edge cost = `gap_minutes × average_wage_per_minute − calloutFee − saved_empty_running`.
+  A big gap is costly (idle paid time); avoiding a call-out is a saving, and so is the
+  depot round trip the bus would otherwise make in the gap. `homeTripMin` measures that
+  round trip against the depots of the buses that could actually run both tasks, not
+  against `defaultBaseId` alone, so this stage and `spanOf` cannot answer "could the
+  driver get home" differently.
+- When the driver could *not* have got home, the gap is paid either way, so it is not
+  charged against the chain and no depot trip is saved.
 - The solver (`minCostChains`, successive shortest paths / SPFA) only pushes flow
   along cost-reducing paths, so it links tasks only when it actually helps.
 
@@ -817,8 +823,13 @@ span(chain)  = [chain.start − legMin(base → first stop),
                 chain.end   + legMin(last stop → base)]   // paid door to door
 shifts       = overlapping spans of that driver merged into one
 cost         = per shift: calloutFee + max(shift length, minShiftMin)/60 × wage
+             + emptyRunMin × runCostPerMin                 // ADR-29
 option cost  = cost(driver's chains + this one) − cost(driver's chains so far)
 ```
+`emptyRunMin` is every minute the bus runs empty: the depot trip that opens each shift
+and the one that closes it, the deadheads between two chains *inside* a shift, and the
+deadheads inside a chain. Before it existed, empty driving was free, so the optimizer
+would send a bus home for an hour rather than pay for the wait.
 **Paid time runs from the depot and ends at the depot** — the driver is working from
 the moment they leave. That one rule also settles what used to be a separate
 question: if two chains are so close that the base-to-base spans overlap, the driver
@@ -1023,6 +1034,7 @@ one of them has a fallback.
 | `estSpeedKmh` | Assumed speed for straight-line travel-time estimates. | 50 |
 | `fallbackLegMin` | Travel time used when there's no matrix and no coordinates. | 12 |
 | `preferredBias` | Extra cost (Ft) charged when a driver is put on a bus other than their preferred one. 0 disables the preference. | 1000 |
+| `runCostPerMin` | Cost (Ft) of one minute of **empty** running: fuel and wear on a bus carrying nobody. Charged on depot trips and deadheads, and what stops the optimizer driving the bus home between two runs. 0 makes empty mileage free again. | 100 |
 | `defaultBaseId` | The club's depot — where buses without a `baseId` of their own start and end the day. `null` means no depot is known, and paid time falls back to spanning the tasks only. | null |
 
 ---

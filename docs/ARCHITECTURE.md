@@ -329,6 +329,8 @@ fixing one.
 | I5 | Every task lands in exactly one chain, or is uncovered with a reason | `minCostChains` (`seen`), `optimizeDay` | `optimizer.test.js` |
 | I6 | A shared vehicle or driver must physically be able to get between two chains | `resourceClash`, `resolveDay` | `optimizer.test.js` |
 | I7 | The call-out fee is per shift, not per chain | `driverPay` + `mergeShifts` | `base-shift.test.js` |
+| I7b | A shift is drawn with one depot run at each end, whatever it is split into | `groupByShift` + `chainShifts` | `depot-return-ui.test.jsx` |
+| I7c | Empty running is charged wherever cost is | `emptyRunMin` inside `driverPay` | `depot-return.test.js` |
 | I8 | Only a vignette-carrying vehicle may serve a vignette-only venue (a hard constraint) | `assignResources`, `optimizeDay` | `vignette.test.js` |
 | I9 | A station, venue or depot cannot be saved without a coordinate | `MasterForm` | `master-coord.test.jsx` |
 | I10 | Referenced master data cannot be deleted | `deleteGuard`, `chainRefs` | `fixes.test.js` |

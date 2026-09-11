@@ -66,7 +66,11 @@ Four tabs, plus a ride editor that opens from a week-view card.
 - **Paid time runs depot to depot.** A driver starts work on leaving the depot and
   finishes on getting back, and two chains merge into one shift when there is no time to
   go home between them — so waiting at a distant venue is paid, under a single call-out
-  fee.
+  fee. A shift is drawn with one depot run at each end however many chains it holds.
+- **Empty running costs money.** Depot trips and deadheads are charged per minute. Without
+  that, waiting had a price and driving did not, so the cheapest plan was to send the bus
+  home for an hour rather than let it wait. A short trip home still pays for itself; a long
+  one no longer does.
 - **Capacity splitting.** Real teams (10 to 14 children) outgrow the 8-seat buses. When
   that happens the task is partitioned across buses by stop, each stop's whole headcount
   on one bus, packed into the fewest buses that fit. Each partition is an independent

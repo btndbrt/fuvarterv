@@ -8,7 +8,7 @@ import { Plus, AlertTriangle, X, ChevronsRight, Lock, Unlock, Zap, ArrowLeftRigh
 import { DAYS, uid, byId } from "../domain/constants.js";
 import { mondayOf, weekdayIdx, minToTime, fmtDateFull, toISO, addDays } from "../domain/datetime.js";
 import { locName, matrixKey, computeMatrix } from "../domain/geo.js";
-import { resolveDay, dayStats, optimizeDay, optimizeWeek, withGeneratedRides, driverAvailableFor, driverPay, chainUse, depotLegs } from "../domain/optimizer.js";
+import { resolveDay, dayStats, optimizeDay, optimizeWeek, withGeneratedRides, driverAvailableFor, driverPay, chainUse, depotLegs, chainShifts } from "../domain/optimizer.js";
 import { baseOf } from "../domain/logic.js";
 import { fmtFt, fmtH } from "../ui/format.js";
 import { Field, NumField, Modal, PlateChip, TeamDot, EmptyState, InfoDot } from "../ui/base.jsx";
@@ -96,12 +96,18 @@ export function DepotLine({ state, leg, kind }) {
   );
 }
 
-export function ChainCard({ state, chain: c, onLock, onMove, onToggleChainLock }) {
-  /* The same formula the daily summary uses: paid time is the depot-to-depot shift,
-     not the span of the tasks. Computed separately, the card and the day's total
-     would drift apart. */
+export function ChainCard({ state, chain: c, place, onLock, onMove, onToggleChainLock }) {
+  /* Priced by the SHIFT, not by this chain alone. A driver who cannot get home
+     between two chains turned out once, so there is one call-out fee and one depot
+     run at each end — and the card has to say so, or it charges a second fee the
+     day's total never counted and draws a trip home that never happened.
+
+     `place` says where this chain sits in its shift. Falling back to a shift of one
+     keeps the component renderable on its own. */
   const use = chainUse(c, c.driverId, c.vehicleId);
-  const { paid, cost, shifts } = driverPay(state, c.driver, [use]);
+  const solo = { pay: driverPay(state, c.driver, [use]), chains: 1, first: true, last: true, gap: null };
+  const { pay, chains: inShift, first, last, gap } = place || solo;
+  const { paid, cost, shifts } = pay;
   const span = shifts[0];
   /* Derived here, not stored on the chain: the depot comes from the vehicle (or
      the club default), so it follows a change of either with nothing to migrate. */
@@ -127,9 +133,18 @@ export function ChainCard({ state, chain: c, onLock, onMove, onToggleChainLock }
         )}
       </div>
       <div className="px-3 py-1 text-xs flex gap-3 flex-wrap" style={{ color: "var(--ink2)", borderBottom: "1px solid var(--line)" }}>
-        <span>fizetett: <b>{fmtH(paid)}</b>{paid > (span ? span.end - span.start : c.end - c.start) ? " (min. műszak)" : ""}</span>
-        {fromBase && <span>műszak: <b className="tnum">{minToTime(span.start)}–{minToTime(span.end)}</b> (telephelytől)</span>}
-        <span>ktg.: <b>{fmtFt(cost)}</b></span>
+        {/* The money belongs to the shift, so it is stated once, on the chain that
+            opens it. Repeating it on the next card would read as a second turn-out. */}
+        {first ? (
+          <>
+            <span>fizetett: <b>{fmtH(paid)}</b>{paid > (span ? span.end - span.start : c.end - c.start) ? " (min. műszak)" : ""}</span>
+            {fromBase && <span>műszak: <b className="tnum">{minToTime(span.start)}–{minToTime(span.end)}</b> (telephelytől)</span>}
+            <span>ktg.: <b>{fmtFt(cost)}</b></span>
+            {inShift > 1 && <span>egy műszak, <b>{inShift} lánc</b></span>}
+          </>
+        ) : (
+          <span>ugyanaz a műszak: <b className="tnum">{minToTime(span.start)}–{minToTime(span.end)}</b> — a fizetett idő és a kiszállási díj a műszak első láncánál szerepel</span>
+        )}
         <span>max. létszám: <b>{c.maxPax} fő</b></span>
       </div>
       {c.issues.length > 0 && (
@@ -140,7 +155,21 @@ export function ChainCard({ state, chain: c, onLock, onMove, onToggleChainLock }
         </div>
       )}
       <div className="rail p-3 flex flex-col gap-1">
-        {legs && <DepotLine state={state} leg={legs.out} kind="out" />}
+        {/* Only the chain that OPENS the shift gets a run out of the depot, and only
+            the one that closes it gets the run back. In between the bus stays where
+            it is: what separates two chains of one shift is an empty trip and a wait
+            on site, never a trip home. Drawing the depot legs per chain put the bus
+            back at the depot in the middle of the afternoon, with times that
+            overlapped the trip it was still making. */}
+        {legs && first && <DepotLine state={state} leg={legs.out} kind="out" />}
+        {gap && (
+          <div className="linkline" title="A busz a helyszínen marad — nincs idő hazamenni">
+            <ChevronsRight size={13} />
+            {gap.dead > 0
+              ? <>{gap.dead} p üresjárat: {locName(state, gap.from)} → {locName(state, gap.to)}{gap.wait > 0 && <> · {gap.wait} p várakozás</>}</>
+              : <>{gap.wait} p várakozás itt: {locName(state, gap.to)}</>}
+          </div>
+        )}
         {c.tasks.map((t, i) => (
           <div key={t.id}>
             <TaskRow state={state} task={t} locked={t.locked || c.locked} chainLocked={c.locked} inChain
@@ -155,7 +184,7 @@ export function ChainCard({ state, chain: c, onLock, onMove, onToggleChainLock }
             )}
           </div>
         ))}
-        {legs && <DepotLine state={state} leg={legs.back} kind="back" />}
+        {legs && last && <DepotLine state={state} leg={legs.back} kind="back" />}
       </div>
     </div>
   );
@@ -391,6 +420,10 @@ export function ScheduleScreen({ state, update }) {
 
   const res = useMemo(() => resolveDay(state, weekday, weekMon), [state, weekday]);
   const curStats = useMemo(() => dayStats(state, res.chains), [state, res]);
+  /* Which shift each chain belongs to, so a card can tell whether it opens one,
+     closes one, or merely continues the one before it. Worked out for the whole day
+     at once, because the answer depends on the driver's OTHER chains. */
+  const places = useMemo(() => chainShifts(state, res.chains), [state, res]);
   const mxStale = state.matrix && state.matrix.key !== matrixKey(state);
 
   const doMatrix = async () => {
@@ -551,6 +584,9 @@ export function ScheduleScreen({ state, update }) {
             <NumField label="Megállónkénti idő (perc)" value={state.settings.dwellMin} min={0} onCommit={(v) => setSetting("dwellMin", v)} />
             <NumField label="Becsült sebesség (km/h)" value={state.settings.estSpeedKmh} min={1} onCommit={(v) => setSetting("estSpeedKmh", v)} />
             <NumField label="Alap üresjárat adat híján (perc)" value={state.settings.fallbackLegMin} min={0} onCommit={(v) => setSetting("fallbackLegMin", v)} />
+            <NumField label="Üresjárat költsége (Ft/perc)"
+              hint="Az utas nélkül megtett percek ára: üzemanyag és kopás. Ez tartja vissza az optimalizálást attól, hogy két fuvar között hazaküldje a buszt a telephelyre. 0 = az üresjárat ingyenes."
+              value={state.settings.runCostPerMin} min={0} onCommit={(v) => setSetting("runCostPerMin", v)} />
             <NumField label="Preferált jármű súlya (Ft)" hint="Mennyire ragaszkodjon a sofőr saját buszához. 0 = kikapcsolva."
               value={state.settings.preferredBias} min={0} onCommit={(v) => setSetting("preferredBias", v)} />
             <NumField label="Egyenletes terhelés súlya (Ft)" hint="Mennyire ossza el a munkát egyenletesen a sofőrök között, a fizetett idő alapján. 0 = kikapcsolva, csak a költség számít."
@@ -647,7 +683,7 @@ export function ScheduleScreen({ state, update }) {
       {res.skipped.map((sk, i) => <div key={i} className="banner banner-warn mb-2"><AlertTriangle size={16} />{sk}</div>)}
 
       {res.chains.map((c) => (
-        <ChainCard key={c.id} state={state} chain={c} onLock={toggleLock} onMove={setMoveTask}
+        <ChainCard key={c.id} state={state} chain={c} place={places.get(c)} onLock={toggleLock} onMove={setMoveTask}
           onToggleChainLock={() => toggleChainLock(c.id)} />
       ))}
       {res.chains.length === 0 && res.tasks.length > 0 && (

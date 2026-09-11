@@ -27,6 +27,15 @@ export const DEFAULT_SETTINGS = {
      two can be weighed against each other. 0 disables it and restores pure
      cost-minimising behaviour. */
   fairnessBias: 5000,
+  /* HUF per minute of EMPTY running: fuel, tyres and wear on a bus carrying nobody.
+     Depot runs and deadheads are charged with it (ADR-29).
+
+     Without it empty driving was free, and the optimizer would send a bus 22 minutes
+     home and 22 minutes back to avoid paying for 96 minutes of waiting, because only
+     the waiting had a price. The default is calibrated so a long trip home stops
+     paying for itself while a short one still does: at a 50 km/h average this is
+     about 120 HUF per empty kilometre. 0 restores the old free-mileage behaviour. */
+  runCostPerMin: 100,
   defaultBaseId: null,  // the club depot; a vehicle's own baseId overrides it
 };
 
