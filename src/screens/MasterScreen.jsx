@@ -79,7 +79,7 @@ export function MasterForm({ kind, state, entity, onSave, onCancel }) {
     venues: { name: "", address: "", note: "", lat: null, lon: null, needsVignette: false },
     bases: { name: "", address: "", note: "", lat: null, lon: null },
     vehicles: { name: "", plate: "", seats: 8, note: "", hasVignette: false },
-    drivers: { name: "", phone: "", email: "", note: "", wage: 3000, minShiftMin: 120, availability: [] },
+    drivers: { name: "", phone: "", email: "", note: "", wage: 3000, minShiftMin: 180, availability: [] },
   }[kind];
   const [f, setF] = useState(entity || blank);
   const [plateErr, setPlateErr] = useState("");
@@ -183,7 +183,8 @@ export function MasterForm({ kind, state, entity, onSave, onCancel }) {
             <Field label="Órabér (Ft/óra)">
               <input type="number" min="0" className="inp" value={f.wage ?? ""} onChange={(e) => setF({ ...f, wage: e.target.value })} />
             </Field>
-            <Field label="Min. műszak (perc)">
+            <Field label="Min. műszak (perc)"
+              hint="A legrövidebb műszak, amit a klub kifizet. Ez dönti el, megéri-e a sofőrt két fuvar között hazaküldeni: minél magasabb, annál inkább marad a helyszínen — és annál inkább egyben marad a napja.">
               <input type="number" min="0" className="inp" value={f.minShiftMin ?? ""} onChange={(e) => setF({ ...f, minShiftMin: e.target.value })} />
             </Field>
           </div>

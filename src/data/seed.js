@@ -32,7 +32,7 @@ export function ensureShape(s) {
   s.vehicles = (s.vehicles || []).map((v) => ({ ...v, seats: Number(v.seats) || 0, plate: v.plate || "", hasVignette: !!v.hasVignette, baseId: v.baseId ?? null }));
   /* email: the driver's sign-in address, lower-cased. A user with the driver role
      opens on their own day plan, matched on this. */
-  s.drivers = (s.drivers || []).map((d) => ({ ...d, wage: d.wage ?? 3000, minShiftMin: d.minShiftMin ?? 120, availability: d.availability || [], preferredVehicleId: d.preferredVehicleId ?? null, email: d.email || "" }));
+  s.drivers = (s.drivers || []).map((d) => ({ ...d, wage: d.wage ?? 3000, minShiftMin: d.minShiftMin ?? 180, availability: d.availability || [], preferredVehicleId: d.preferredVehicleId ?? null, email: d.email || "" }));
   /* returnStationIds === null means the return leg mirrors the outbound one (the
      original single-list behaviour). An array means the return leg has its own stops.
      The fields are deliberately flat rather than nested: the team screen's array
@@ -112,14 +112,14 @@ export function seedState() {
       { id: "b7", name: "Kisbusz 7", plate: "ABC-107", seats: 8, hasVignette: false, note: "Megyei engedély" },
     ],
     drivers: [
-      { id: "d1", name: "Sofőr 1", phone: "", note: "Állandó busz: ABC-101", wage: 3000, minShiftMin: 120, availability: [], preferredVehicleId: "b1" },
-      { id: "d2", name: "Sofőr 2", phone: "", note: "Állandó busz: ABC-102", wage: 3000, minShiftMin: 120, availability: [], preferredVehicleId: "b2" },
-      { id: "d3", name: "Sofőr 3", phone: "", note: "ABC-103, váltásban Sofőr 4-gyel", wage: 3000, minShiftMin: 120, availability: [], preferredVehicleId: "b3" },
-      { id: "d4", name: "Sofőr 4", phone: "", note: "ABC-103, váltásban Sofőr 3-mal", wage: 3000, minShiftMin: 120, availability: [], preferredVehicleId: "b3" },
-      { id: "d5", name: "Sofőr 5", phone: "", note: "Állandó busz: ABC-104", wage: 3000, minShiftMin: 120, availability: [], preferredVehicleId: "b4" },
-      { id: "d6", name: "Sofőr 6", phone: "", note: "Állandó busz: ABC-105", wage: 3000, minShiftMin: 120, availability: [], preferredVehicleId: "b5" },
-      { id: "d7", name: "Sofőr 7", phone: "", note: "Állandó busz: ABC-106", wage: 3000, minShiftMin: 120, availability: [], preferredVehicleId: "b6" },
-      { id: "d8", name: "Sofőr 8", phone: "", note: "Állandó busz: ABC-107", wage: 3000, minShiftMin: 120, availability: [], preferredVehicleId: "b7" },
+      { id: "d1", name: "Sofőr 1", phone: "", note: "Állandó busz: ABC-101", wage: 3000, minShiftMin: 180, availability: [], preferredVehicleId: "b1" },
+      { id: "d2", name: "Sofőr 2", phone: "", note: "Állandó busz: ABC-102", wage: 3000, minShiftMin: 180, availability: [], preferredVehicleId: "b2" },
+      { id: "d3", name: "Sofőr 3", phone: "", note: "ABC-103, váltásban Sofőr 4-gyel", wage: 3000, minShiftMin: 180, availability: [], preferredVehicleId: "b3" },
+      { id: "d4", name: "Sofőr 4", phone: "", note: "ABC-103, váltásban Sofőr 3-mal", wage: 3000, minShiftMin: 180, availability: [], preferredVehicleId: "b3" },
+      { id: "d5", name: "Sofőr 5", phone: "", note: "Állandó busz: ABC-104", wage: 3000, minShiftMin: 180, availability: [], preferredVehicleId: "b4" },
+      { id: "d6", name: "Sofőr 6", phone: "", note: "Állandó busz: ABC-105", wage: 3000, minShiftMin: 180, availability: [], preferredVehicleId: "b5" },
+      { id: "d7", name: "Sofőr 7", phone: "", note: "Állandó busz: ABC-106", wage: 3000, minShiftMin: 180, availability: [], preferredVehicleId: "b6" },
+      { id: "d8", name: "Sofőr 8", phone: "", note: "Állandó busz: ABC-107", wage: 3000, minShiftMin: 180, availability: [], preferredVehicleId: "b7" },
     ],
     /* Weekday indices, Monday first: 0=Mon, 1=Tue, 2=Wed, 3=Thu, 4=Fri. */
     trainings: [
