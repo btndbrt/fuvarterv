@@ -3,6 +3,9 @@ import { mondayOf } from "../src/domain/datetime.js";
 import { legMin } from "../src/domain/geo.js";
 import {
   optimizeDay,
+  ridesFromChains,
+  driverDayShifts,
+  rideUse,
   genDayTasks,
   mkChain,
   chainUse,
@@ -267,3 +270,55 @@ describe("chain cards read the shift, not the chain", () => {
     expect(p0.pay.shifts[0].end).toBe(p0.shift.back.arrive);
   });
 });
+
+describe("the driver's sheet shows the run the club is billed for", () => {
+  /* The whole pipeline, because the bug lived in the seam: the optimizer merged the
+     day into one chain and priced it as one unbroken shift, then ride generation
+     threw away which run each ride belonged to, and the driver's sheet re-decided
+     the question per ride. It put a trip home in the middle of a run nobody was ever
+     going home in the middle of. */
+  const state = makeState({ venue: FAR });
+  const out = optimizeDay(state, WEEKDAY, WEEK_MON);
+  const rides = ridesFromChains(state, WEEKDAY, out.chains);
+  const withRides = { ...state, rides };
+  const entries = rides.map((r) => ({ ride: r, training: byIdish(withRides.trainings, r.trainingId) }));
+
+  test("one chain generates rides that all name the same run", () => {
+    expect(out.chains).toHaveLength(1);
+    expect(rides).toHaveLength(2);
+    expect(rides[0].runId).toBeTruthy();
+    expect(rides[1].runId).toBe(rides[0].runId);
+  });
+
+  test("the sheet is one shift with one depot run at each end", () => {
+    const shifts = driverDayShifts(withRides, entries);
+    expect(shifts).toHaveLength(1);
+    expect(shifts[0].rows).toHaveLength(2);
+    expect(shifts[0].out.fromId).toBe("hZAK");
+    expect(shifts[0].back.toId).toBe("hZAK");
+  });
+
+  test("and the hours on it match the chain the day was costed from", () => {
+    const sheet = driverDayShifts(withRides, entries);
+    const paid = driverPay(withRides, state.drivers[0], entries.map((e) => rideUse(withRides, e.ride, e.training)));
+    expect(paid.shifts).toHaveLength(1);
+    expect(paid.shifts[0].start).toBe(sheet[0].start);
+    expect(paid.shifts[0].end).toBe(sheet[0].end);
+  });
+
+  test("rides with no run of their own still fall back to the clock", () => {
+    /* Rides saved before runId existed, or built by hand in the ride editor. They get
+       the old behaviour, which is the only honest answer when nothing says the two
+       belong together. */
+    const bare = rides.map((r) => ({ ...r, runId: undefined }));
+    const st = { ...state, rides: bare };
+    const es = bare.map((r) => ({ ride: r, training: byIdish(st.trainings, r.trainingId) }));
+    expect(driverDayShifts(st, es)).toHaveLength(2);
+  });
+});
+
+/* byId from constants would do, but importing it here only for the tests above reads
+   worse than one line. */
+function byIdish(arr, id) {
+  return arr.find((x) => x.id === id);
+}

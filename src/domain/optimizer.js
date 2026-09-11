@@ -449,6 +449,7 @@ export function rideUse(state, ride, training) {
   const vissza = (ride.dir || "oda") === "vissza";
   return {
     driverId: ride.driverId, vehicleId: ride.vehicleId, start, end,
+    runId: ride.runId || null,
     from: vissza ? training.venueId : (stops[0]?.stationId || null),
     to: vissza ? (stops[stops.length - 1]?.stationId || null) : training.venueId,
   };
@@ -478,7 +479,17 @@ function groupByShift(state, rows) {
   for (const r of sorted) {
     const span = spanOf(state, r.use);
     const g = groups[groups.length - 1];
-    if (g && span.start <= g.end) { g.rows.push(r); g.end = Math.max(g.end, span.end); continue; }
+    /* Same run means same shift, whatever the gap. The clock rule below asks whether
+       there was time to go home; for two rides of ONE chain that question is already
+       settled — the optimizer kept the bus out and charged for the wait. Asking it
+       again per ride is what put a depot round trip in the middle of a run and handed
+       the driver a sheet that disagreed with the invoice. */
+    const sameRun = g && r.use.runId != null && r.use.runId === g.rows[g.rows.length - 1].use.runId;
+    if (g && (sameRun || span.start <= g.end)) {
+      g.rows.push(r);
+      g.end = Math.max(g.end, span.end);
+      continue;
+    }
     groups.push({ rows: [r], start: span.start, end: span.end });
   }
   return groups.map((g) => ({
@@ -584,7 +595,11 @@ export function mergeShifts(spans) {
    makes that trade honest everywhere at once, the assignment search and the
    improvement loop included. */
 export function driverPay(state, driver, uses) {
-  const shifts = mergeShifts(uses.map((u) => spanOf(state, u)));
+  /* Through groupByShift, not mergeShifts, so that pay sees the run grouping too.
+     Billing a chain as one unbroken shift while the driver's sheet drew three is
+     exactly the disagreement ADR-14 exists to prevent. */
+  const shifts = groupByShift(state, (uses || []).map((u) => ({ use: u })))
+    .map((g) => ({ start: g.start, end: g.end }));
   let paid = 0, cost = 0;
   for (const sh of shifts) {
     const p = Math.max(sh.end - sh.start, driver?.minShiftMin || 0);
@@ -877,11 +892,18 @@ export function dayStats(state, chains) {
 export function ridesFromChains(state, weekday, chains) {
   const out = [];
   for (const ch of chains || []) {
+    /* Every ride of one chain carries the same runId. A chain IS one continuous
+       occupancy — the optimizer priced it as a single turn-out with the bus staying
+       out — and without this the ride-level grouping re-decided that question per
+       ride and put a trip home in the middle of a run the club was billed for as
+       unbroken. A chain fresh out of optimizeDay has no id, hence the fallback. */
+    const runId = ch.id || uid();
     for (const t of ch.tasks || []) {
       const tr = byId(state.trainings, t.trainingId);
       if (!tr) continue;
       out.push({
         id: uid(),
+        runId,
         trainingId: t.trainingId,
         day: tr.type === "weekly" ? weekday : null,
         date: tr.type === "once" ? tr.date : null,

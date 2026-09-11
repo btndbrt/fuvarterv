@@ -487,13 +487,18 @@ export function ScheduleScreen({ state, update }) {
 
   const applyProposal = () => {
     const out = proposal.out;
+    /* Identified ONCE, before the chains are used twice. A chain straight out of the
+       optimizer has no id, and stamping one separately in each branch gave the saved
+       chain and the rides generated from it two different ids — so a ride could no
+       longer name the run it belongs to. */
+    const chains = (out.chains || []).map((c) => ({ ...c, id: c.id || uid() }));
     update((s) => ({
       ...s,
       assignments: {
         ...s.assignments,
         [weekday]: {
-          chains: (out.chains || []).map((c) => ({
-            id: c.id || uid(), driverId: c.driverId, vehicleId: c.vehicleId,
+          chains: chains.map((c) => ({
+            id: c.id, driverId: c.driverId, vehicleId: c.vehicleId,
             /* The chain-level lock has to survive the round trip, or optimising once
                would quietly unlock every chain the user had settled. */
             locked: !!c.locked,
@@ -501,7 +506,7 @@ export function ScheduleScreen({ state, update }) {
           })),
         },
       },
-      rides: withGeneratedRides(s, weekday, weekMon, out.chains),
+      rides: withGeneratedRides(s, weekday, weekMon, chains),
     }));
     setProposal(null);
     setMsg("A beosztás alkalmazva és a menetrend rögzítve — a fuvarok a Hét és a Sofőr nézetben is megjelennek.");

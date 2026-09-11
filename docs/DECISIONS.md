@@ -327,6 +327,17 @@ trainings. The schedule becomes the single source for that day.
 generated ride is overwritten by the next regeneration, which is why the button asks for
 confirmation and says so.
 
+**A ride names its run** (`ride.runId`, the chain's id). Without it the two descriptions
+disagreed again in the one place it mattered: a chain is a single continuous occupancy,
+priced as one turn-out with the bus staying out, but rides are one per task, so the
+shift grouping re-asked "could the driver have gone home" between them and answered yes.
+The driver's sheet then showed a depot round trip in the middle of a run the club was
+billed for as unbroken. Same run means same shift, whatever the clock says; a ride with
+no `runId` (hand-built, or saved before this existed) falls back to the clock rule.
+
+**Migration.** None, and none is possible: `runId` is written at generation time, so
+rides saved earlier keep the old grouping until the day is regenerated.
+
 ## ADR-18 — The coordinate is mandatory
 
 **Context.** Without a coordinate `legMin` falls back to `fallbackLegMin` and the point
