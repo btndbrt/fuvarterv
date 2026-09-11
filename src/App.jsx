@@ -1,0 +1,209 @@
+/* Fuvarterv — the application shell: navigation, state, saving.
+
+   There is no global store. The whole application state is one object held here,
+   passed down as props, and updated through `update(fn)` with a pure transform.
+   At this size that is less machinery to understand, not more. */
+
+import { useState, useEffect, useRef, useContext } from "react";
+import { CalendarDays, Boxes, Car, Workflow, HelpCircle, RotateCcw, LogOut } from "lucide-react";
+
+import "./ui/styles.css";
+import { RoleContext } from "./roleContext.js";
+import { loadState, persistState } from "./data/storage.js";
+import { ensureShape, seedState } from "./data/seed.js";
+import { isNotFound } from "./data/storage.js";
+import { HelpSheet } from "./ui/base.jsx";
+import { WeekScreen } from "./screens/WeekScreen.jsx";
+import { ScheduleScreen } from "./screens/ScheduleScreen.jsx";
+import { DataScreen } from "./screens/DataScreen.jsx";
+import { DriverScreen } from "./screens/DriverScreen.jsx";
+import { RideScreen, o2t } from "./screens/RideScreen.jsx";
+
+const TABS = [
+  { key: "week", label: "Hét", icon: CalendarDays },
+  { key: "sched", label: "Beosztás", icon: Workflow },
+  { key: "data", label: "Adatok", icon: Boxes },
+  { key: "driver", label: "Sofőr", icon: Car },
+];
+
+export default function App() {
+  /* Role: AuthGate loads it from the server, and it does not change while App is
+     mounted (switching user remounts App). As a driver the UI offers only the driver
+     tab and NEVER writes. The actual prohibition comes from the database's row level
+     security policies; this is only the matching UX. */
+  const { role, email: myEmail } = useContext(RoleContext);
+  const isAdmin = role === "admin";
+  const [state, setState] = useState(null);
+  const [tab, setTab] = useState(isAdmin ? "week" : "driver");
+  const [rideTarget, setRideTarget] = useState(null);
+  const [notice, setNotice] = useState("");
+  const [loadError, setLoadError] = useState(false);
+  /* Driver plus an empty workspace. For an admin we seed sample data and SAVE it
+     (that is what creates the row); for a driver that write is both forbidden and
+     pointless. */
+  const [emptyWs, setEmptyWs] = useState(false);
+  const [retryTick, setRetryTick] = useState(0);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const loaded = useRef(false);
+  /* The last blob written out, or read back unchanged from the server. Saving
+     compares against THIS, not against object identity: otherwise every page load
+     would write the state it just read, pushing the other editor into a "changed
+     elsewhere" conflict and burning through the 20-slot save history. */
+  const lastSaved = useRef(null);
+  /* The save waiting inside the debounce, so it can be flushed on unmount or when
+     the page is hidden, instead of being silently dropped by clearTimeout. */
+  const pending = useRef(null);
+
+  const flush = () => {
+    if (!isAdmin) return;   // a driver never writes; the save effect never schedules one either
+    const p = pending.current;
+    if (!p) return;
+    pending.current = null;
+    lastSaved.current = p.blob;
+    persistState(p.state);
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoadError(false);
+    (async () => {
+      try {
+        const s = await loadState();
+        if (cancelled) return;
+        if (s) {
+          // Real state read from the server: already persisted, so do not write it back.
+          const shaped = ensureShape(s);
+          lastSaved.current = JSON.stringify(shaped);
+          setState(shaped);
+        } else if (isAdmin) {
+          // Empty value: seed sample data, which MUST be written out to create the row.
+          setState(ensureShape(seedState()));
+        } else {
+          setEmptyWs(true);
+        }
+        loaded.current = true;
+      } catch (e) {
+        if (cancelled) return;
+        if (isNotFound(e) && isAdmin) {
+          // Genuinely empty workspace → seed sample data (and persist it).
+          setState(ensureShape(seedState()));
+          loaded.current = true;
+        } else if (isNotFound(e)) {
+          setEmptyWs(true);
+          loaded.current = true;
+        } else {
+          // Real read failure (network/permissions) → show a retry screen,
+          // never mount the app on seed data over unread real data.
+          setLoadError(true);
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [retryTick]);
+
+  useEffect(() => {
+    if (!isAdmin) return;   // belt and braces; row level security would reject it anyway
+    if (!loaded.current || !state) return;
+    const blob = JSON.stringify(state);
+    if (blob === lastSaved.current) return;   // nothing actually changed, so nothing is written
+    pending.current = { blob, state };
+    const t = setTimeout(flush, 300);
+    return () => clearTimeout(t);
+  }, [state]);
+
+  /* Flush a pending save when the page closes, is hidden, or unmounts. That last
+     one is signing out: <App/> unmounts before the debounce would fire. */
+  useEffect(() => {
+    const onHide = () => { if (document.visibilityState === "hidden") flush(); };
+    window.addEventListener("pagehide", flush);
+    document.addEventListener("visibilitychange", onHide);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      document.removeEventListener("visibilitychange", onHide);
+      flush();
+    };
+  }, []);
+
+  const update = (fn) => setState((s) => fn(s));
+  const openRide = (occ) => { setRideTarget(o2t(occ)); setTab("ride"); };
+  const resetSeed = () => { setState(ensureShape(seedState())); setNotice(""); };
+
+  if (loadError) {
+    return (
+      <div className="ft-root flex items-center justify-center" style={{ minHeight: "100vh", padding: 24 }}>
+        <div className="card p-4" style={{ maxWidth: 380, textAlign: "center" }}>
+          <div className="disp text-2xl mb-2">Nem sikerült betölteni</div>
+          <p className="mb-3" style={{ color: "var(--ink2)", lineHeight: 1.5 }}>
+            Az adatok betöltése nem sikerült (valószínűleg hálózati hiba). Az
+            adataid biztonságban vannak a szerveren. Ellenőrizd a kapcsolatot, és
+            próbáld újra.
+          </p>
+          <button className="btn btn-pri w-full" onClick={() => { setLoadError(false); setRetryTick((t) => t + 1); }}>
+            Újrapróbálkozás
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (emptyWs) {
+    return (
+      <div className="ft-root flex items-center justify-center" style={{ minHeight: "100vh", padding: 24 }}>
+        <div className="card p-4" style={{ maxWidth: 380, textAlign: "center" }}>
+          <div className="disp text-2xl mb-2">Még nincs feltöltött adat</div>
+          <p className="mb-3" style={{ color: "var(--ink2)", lineHeight: 1.5 }}>
+            A munkaterület még üres, és sofőrként nem tudsz adatot felvenni.
+            Kérd meg az adminisztrátort, hogy töltse fel a fuvarokat, aztán
+            nyisd meg újra az alkalmazást.
+          </p>
+          <button className="btn btn-pri w-full" onClick={() => { flush(); window.dispatchEvent(new CustomEvent("fuvarterv:signout")); }}>
+            Kijelentkezés
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!state) {
+    return (
+      <div className="ft-root flex items-center justify-center" style={{ minHeight: "100vh" }}>
+        <div className="disp text-2xl">Fuvarterv betöltése…</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="ft-root">
+      <header className="flex items-center gap-2 px-4" style={{ background: "var(--surface-inv)", color: "var(--on-inv)", height: 52 }}>
+        <span aria-hidden style={{ width: 10, height: 10, borderRadius: "50%", background: "var(--acc)" }} />
+        <span className="disp text-xl" style={{ letterSpacing: ".12em" }}>Fuvarterv</span>
+        <div className="ml-auto flex items-center gap-1">
+          {isAdmin && <button className="header-ic" onClick={() => window.dispatchEvent(new CustomEvent("fuvarterv:restore"))} aria-label="Korábbi mentések"><RotateCcw size={18} /></button>}
+          <button className="header-ic" onClick={() => { flush(); window.dispatchEvent(new CustomEvent("fuvarterv:signout")); }} aria-label="Kijelentkezés"><LogOut size={18} /></button>
+          <button className="header-ic" onClick={() => setHelpOpen(true)} aria-label="Súgó — hogyan működik?"><HelpCircle size={20} /></button>
+        </div>
+      </header>
+
+      <main className="mx-auto w-full max-w-2xl" style={{ paddingBottom: 84 }}>
+        {isAdmin && tab === "week" && <WeekScreen state={state} openRide={openRide} />}
+        {isAdmin && tab === "sched" && <ScheduleScreen state={state} update={update} />}
+        {isAdmin && tab === "data" && <DataScreen state={state} update={update} resetSeed={resetSeed} notice={notice} setNotice={setNotice} myEmail={myEmail} />}
+        {tab === "driver" && <DriverScreen state={state} myEmail={myEmail} />}
+        {isAdmin && tab === "ride" && <RideScreen state={state} update={update} target={rideTarget} setTarget={setRideTarget} onExit={() => { setRideTarget(null); setTab("week"); }} />}
+      </main>
+
+      <nav className="tabbar" aria-label="Fő navigáció">
+        {(isAdmin ? TABS : TABS.filter((t) => t.key === "driver")).map((t) => {
+          const Icon = t.icon;
+          return (
+            <button key={t.key} className={tab === t.key ? "on" : ""}
+              onClick={() => { setTab(t.key); setNotice(""); }}>
+              <Icon size={20} /> {t.label}
+            </button>
+          );
+        })}
+      </nav>
+      {helpOpen && <HelpSheet onClose={() => setHelpOpen(false)} />}
+    </div>
+  );
+}
