@@ -302,6 +302,37 @@ export function mkChain(state, ts, extra = {}) {
   };
 }
 
+/* The round trip home between two tasks: out of A's end to a depot and on to B's
+   start. Null when no depot is known anywhere, which is the "no depot configured"
+   case where paid time is measured from the tasks themselves and nobody ever goes
+   home mid-day.
+
+   The depot has to be the one the PAY calculation will use, or the two disagree.
+   spanOf resolves it per vehicle through baseOf, and the vehicle is not chosen yet
+   at chaining time, so this takes the shortest trip over the depots of the buses
+   that could actually run both tasks. That is the optimistic reading, matching the
+   question being asked: could the driver get home?
+
+   Reading settings.defaultBaseId alone was the bug. A bus with its own baseId made
+   the flow decline to chain (the club depot is near, so "they can go home") while
+   spanOf merged the two into one shift anyway (the bus's own depot is far). The day
+   then came out as two chains the pay model treated as one turn-out, and the screen
+   drew a depot round trip that arrived after it had departed. */
+export function homeTripMin(state, A, B) {
+  const needsV = taskNeedsVignette(state, A) || taskNeedsVignette(state, B);
+  const pax = Math.max(A.pax, B.pax);
+  const bases = new Set();
+  for (const v of state.vehicles) {
+    if (v.seats < pax || (needsV && !v.hasVignette)) continue;
+    const b = baseOf(state, v.id);
+    if (b) bases.add(b);
+  }
+  if (!bases.size) return null;
+  let best = Infinity;
+  for (const b of bases) best = Math.min(best, legMin(state, A.to, b) + legMin(state, b, B.from));
+  return best;
+}
+
 /* Minimum-cost flow for chaining (bipartite graph, successive shortest paths).
    An edge exists when A.end + deadhead(A.to, B.from) <= B.start; its cost is
    wage x gap minus the call-out fee. Flow is only pushed along paths that reduce
@@ -363,7 +394,14 @@ export function minCostChains(n, edges) {
    React hook — and the linter treats it as one.) */
 export const chainFrom = (c) => c.tasks[0].from;
 export const chainTo = (c) => c.tasks[c.tasks.length - 1].to;
-export const chainUse = (c, driverId, vehicleId) => ({ driverId, vehicleId, start: c.start, end: c.end, from: chainFrom(c), to: chainTo(c) });
+/* `dead` rides along because empty running is PRICED (ADR-29), and the deadheads
+   inside a chain are empty minutes somebody pays for. Carrying it on the occupancy
+   is what lets emptyRunMin stay a function of the uses alone, so driverPay — which
+   only ever sees uses — can charge for them. */
+export const chainUse = (c, driverId, vehicleId) => ({
+  driverId, vehicleId, start: c.start, end: c.end, from: chainFrom(c), to: chainTo(c),
+  dead: (c.links || []).reduce((a, l) => a + l.dead, 0),
+});
 
 /* The two depot runs bracketing one occupancy: out to the first pickup, and back
    from the last drop-off. Null when no depot applies, which is exactly the case
@@ -416,21 +454,28 @@ export function rideUse(state, ride, training) {
   };
 }
 
-/* A driver's day split into SHIFTS: rides whose depot-to-depot spans touch are one
-   turn-out, because there is no time to go home in between.
+/* ONE driver's occupancies grouped into SHIFTS: rows whose depot-to-depot spans
+   touch are one turn-out, because there is no time to go home in between.
 
    This is deliberately the same rule mergeShifts applies to pay, so the depot times
    a driver reads off their sheet and the hours the club is billed for cannot
    disagree. Each group carries the depot run that opens it and the one that closes
-   it, taken from its first and last ride — those are the two trips actually driven.
+   it, taken from its first and last row — those are the two trips actually driven.
    A group's own vehicle decides the depot, so a driver changing bus mid-shift still
-   gets the right one at each end. */
-export function driverDayShifts(state, entries) {
-  const rows = entries
-    .map((e) => ({ ...e, use: rideUse(state, e.ride, e.training) }))
-    .sort((a, b) => a.use.start - b.use.start);
+   gets the right one at each end.
+
+   Every caller that needs "which trips are one turn-out" goes through here: the
+   driver's sheet, the schedule's chain cards, and the empty-running charge. The
+   grouping used to be inlined in driverDayShifts alone, so the schedule screen went
+   without and drew a depot round trip in the middle of a single shift — arriving at
+   the depot AFTER it had already left again. A shared helper is what stops the two
+   readings drifting apart again.
+
+   `rows` are objects carrying a `use`; whatever else they hold is passed through. */
+function groupByShift(state, rows) {
+  const sorted = [...rows].sort((a, b) => a.use.start - b.use.start);
   const groups = [];
-  for (const r of rows) {
+  for (const r of sorted) {
     const span = spanOf(state, r.use);
     const g = groups[groups.length - 1];
     if (g && span.start <= g.end) { g.rows.push(r); g.end = Math.max(g.end, span.end); continue; }
@@ -441,6 +486,75 @@ export function driverDayShifts(state, entries) {
     out: depotLegs(state, g.rows[0].use)?.out || null,
     back: depotLegs(state, g.rows[g.rows.length - 1].use)?.back || null,
   }));
+}
+
+/* A driver's day split into shifts, from their rides. */
+export function driverDayShifts(state, entries) {
+  return groupByShift(state, entries.map((e) => ({ ...e, use: rideUse(state, e.ride, e.training) })));
+}
+
+/* The day's chains grouped into the shifts they will actually be PAID as, keyed by
+   THE CHAIN OBJECT. The schedule screen renders from this: the depot run out belongs
+   to the first chain of a shift and the run back to the last, and what sits between
+   two chains of one shift is a deadhead and a wait on site, not a trip home.
+
+   Keyed by identity rather than by `c.id`, because a chain fresh out of optimizeDay
+   has no id at all — only saved chains and locked skeletons do. Keying by id would
+   collide every unsaved chain onto one undefined entry, and a card would then read a
+   shift belonging to some other chain.
+
+   Grouped per driver, since a shift is one person's turn-out. A chain with no driver
+   is its own shift — two unassigned chains have no reason to merge, and nobody is
+   being billed for them yet. */
+export function chainShifts(state, chains) {
+  const byDriver = new Map();
+  for (const c of chains || []) {
+    const k = c.driverId || c;                 // no driver: the chain keys itself
+    if (!byDriver.has(k)) byDriver.set(k, []);
+    byDriver.get(k).push(c);
+  }
+  const out = new Map();
+  for (const cs of byDriver.values()) {
+    const rows = cs.map((c) => ({ chain: c, use: chainUse(c, c.driverId, c.vehicleId) }));
+    for (const g of groupByShift(state, rows)) {
+      /* Priced once for the whole shift, so the cards of a two-chain shift cannot
+         show two call-out fees for a driver who only turned out once. */
+      const pay = driverPay(state, byId(state.drivers, g.rows[0].chain.driverId), g.rows.map((r) => r.use));
+      g.rows.forEach((r, i) => out.set(r.chain, {
+        shift: g, pay, chains: g.rows.length,
+        first: i === 0, last: i === g.rows.length - 1,
+        /* The link back to the previous chain of the same shift: the empty trip the
+           bus really makes, and how long it then stands there. */
+        gap: i === 0 ? null : {
+          dead: legMin(state, g.rows[i - 1].use.to, r.use.from),
+          from: g.rows[i - 1].use.to,
+          to: r.use.from,
+          wait: Math.max(0, r.use.start - g.rows[i - 1].use.end - legMin(state, g.rows[i - 1].use.to, r.use.from)),
+        },
+      }));
+    }
+  }
+  return out;
+}
+
+/* The EMPTY minutes a driver's occupancies cost: the depot run that opens each
+   shift and the one that closes it, the deadheads between two runs inside a shift,
+   and the deadheads inside the chains themselves.
+
+   This is the quantity ADR-29 puts a price on. It is deliberately a function of the
+   uses alone — `dead` rides along on the occupancy — because driverPay never sees
+   the chains, and the charge has to land in the same place the wages do or the
+   optimizer would weigh a priced plan against an unpriced one. */
+export function emptyRunMin(state, uses) {
+  let min = 0;
+  for (const g of groupByShift(state, (uses || []).map((u) => ({ use: u })))) {
+    min += (g.out?.min || 0) + (g.back?.min || 0);
+    g.rows.forEach((r, i) => {
+      min += r.use.dead || 0;
+      if (i > 0) min += legMin(state, g.rows[i - 1].use.to, r.use.from);
+    });
+  }
+  return min;
 }
 
 /* A driver's shifts: overlapping depot-to-depot spans merge into ONE shift.
@@ -460,7 +574,15 @@ export function mergeShifts(spans) {
 
 /* A driver's paid time and cost, from the chain occupancies assigned to them.
    The call-out fee is PER SHIFT, not per chain: somebody who could not go home in
-   between did not turn out twice. */
+   between did not turn out twice.
+
+   Cost is wages, plus the call-out fees, PLUS the empty running (ADR-29). Until the
+   last of those existed, driving an empty bus was free: the optimizer would happily
+   send it 22 minutes back to the depot and 22 minutes out again to avoid paying for
+   96 minutes of waiting, because only the waiting had a price. Charging the empty
+   minutes here — in the one function every cost in the app is built from — is what
+   makes that trade honest everywhere at once, the assignment search and the
+   improvement loop included. */
 export function driverPay(state, driver, uses) {
   const shifts = mergeShifts(uses.map((u) => spanOf(state, u)));
   let paid = 0, cost = 0;
@@ -469,7 +591,9 @@ export function driverPay(state, driver, uses) {
     paid += p;
     cost += (state.settings.calloutFee || 0) + (p / 60) * (driver?.wage || 0);
   }
-  return { paid, cost, shifts };
+  const empty = emptyRunMin(state, uses);
+  cost += empty * (state.settings.runCostPerMin || 0);
+  return { paid, cost, shifts, emptyMin: empty };
 }
 
 /* On-site waiting: the time between two chains that fall inside one shift. The
@@ -479,7 +603,11 @@ export function onSiteWait(state, uses) {
   let w = 0;
   for (let i = 0; i < us.length - 1; i++) {
     const a = us[i], b = us[i + 1];
-    if (spanOf(state, b).start <= spanOf(state, a).end) w += Math.max(0, b.start - a.end);
+    // The driving between the two is a deadhead, not standing about. Counting the
+    // whole gap as waiting made this stat disagree with the chain card's own
+    // breakdown, which splits the two.
+    if (spanOf(state, b).start <= spanOf(state, a).end)
+      w += Math.max(0, b.start - a.end - legMin(state, a.to, b.from));
   }
   return w;
 }
@@ -718,10 +846,14 @@ export function dayStats(state, chains) {
      in between and counted the call-out fee twice. */
   const byDriver = new Map();
   for (const c of chains) {
-    for (const l of c.links) { dead += l.dead; idle += l.idle; }
+    for (const l of c.links) idle += l.idle;
     // A call-out fee is only due when somebody actually turns out. A chain with no
     // driver used to carry one anyway, inflating the "before" column of the proposal.
-    if (!c.driverId) { paid += Math.max(c.end - c.start, 0); continue; }
+    if (!c.driverId) {
+      paid += Math.max(c.end - c.start, 0);
+      for (const l of c.links) dead += l.dead;   // no shift to charge these to
+      continue;
+    }
     ds.add(c.driverId);
     if (!byDriver.has(c.driverId)) byDriver.set(c.driverId, []);
     byDriver.get(c.driverId).push(chainUse(c, c.driverId, c.vehicleId));
@@ -729,6 +861,11 @@ export function dayStats(state, chains) {
   for (const [id, uses] of byDriver) {
     const r = driverPay(state, byId(state.drivers, id), uses);
     paid += r.paid; cost += r.cost;
+    /* The whole empty run, depot legs included — which is what the club is now
+       charged for, so it is what the stat has to show. Counting only the deadheads
+       between two tasks hid exactly the trip this stat should expose: the bus going
+       home in the middle of the afternoon. */
+    dead += r.emptyMin;
     idle += onSiteWait(state, uses);
   }
   return { drivers: ds.size, chains: chains.length, paidMin: paid, dead, idle, cost: Math.round(cost) };
@@ -843,7 +980,7 @@ export function optimizeDay(state, weekday, weekMon, fairness = null) {
   // Phase 1: chaining by minimum-cost flow, gaps weighted by the average wage.
   const wages = state.drivers.map((d) => d.wage || 0);
   const avgWpm = (wages.reduce((a, b) => a + b, 0) / (wages.length || 1)) / 60;
-  const homeBase = state.settings?.defaultBaseId || null;
+  const runRate = state.settings.runCostPerMin || 0;
   const edges = [];
   for (let a = 0; a < free.length; a++)
     for (let b = 0; b < free.length; b++) {
@@ -853,12 +990,17 @@ export function optimizeDay(state, weekday, weekMon, fairness = null) {
       if (A.end + dead <= B.start) {
         /* If the driver cannot get home during the gap, that waiting time is paid
            whether or not we chain. Chaining then purely saves one call-out fee, so
-           the gap must not be charged against it. The vehicle (and therefore its
-           depot) is not decided yet, so we reckon with the club depot here;
-           assignResources computes the exact price. */
+           the gap must not be charged against it. */
         const gap = B.start - A.end;
-        const forced = homeBase && gap < legMin(state, A.to, homeBase) + legMin(state, homeBase, B.from);
-        edges.push({ a, b, cost: (forced ? 0 : Math.round(gap * avgWpm)) - (state.settings.calloutFee || 0) });
+        const trip = homeTripMin(state, A, B);
+        const forced = trip != null && gap < trip;
+        /* Not chaining means the bus drives A.to → depot → B.from; chaining means it
+           drives A.to → B.from. So chaining also saves the difference in empty
+           running. When the driver is stuck there anyway (forced) no depot trip
+           happens either way, and the two readings cost the same. */
+        const runSave = forced || trip == null ? 0 : Math.max(0, trip - dead) * runRate;
+        edges.push({ a, b, cost: (forced ? 0 : Math.round(gap * avgWpm))
+          - (state.settings.calloutFee || 0) - Math.round(runSave) });
       }
     }
   let freeChains = minCostChains(free.length, edges).map((seq) => mkChain(state, seq.map((i) => free[i])));
@@ -894,11 +1036,18 @@ export function optimizeDay(state, weekday, weekMon, fairness = null) {
     return { asg, cost: skl.reduce((a, c) => a + skelCost(c), 0) + asg.cost };
   };
   let skl = skel, fre = freeChains, plan = evalPlan(skl, fre);
-  // The optimizer's objective before the local-improvement loop. The loop only
-  // accepts a trial when it strictly lowers plan.cost, so this never increases.
+  // The optimizer's objective before the local-improvement loop. The loop never
+  // accepts a trial that costs MORE, so this never increases.
   // (This is money + an uncovered-task penalty — the true monetary cost alone
   // can legitimately rise when improvement covers a previously uncovered task.)
   const objectiveBefore = plan.cost;
+  /* A merge is taken when it is not more expensive, not only when it is cheaper.
+     Two chains a driver runs in one unbroken shift cost exactly the same whether
+     they are recorded as one chain or two, so on a strict test the split survived on
+     a tie — and a split chain prints its own depot run at each end. Accepting the
+     tie states the truth: it is one run. Every accepted merge removes a chain, so
+     the loop still terminates. */
+  const accept = (t) => t.cost <= plan.cost + 1e-9;
   for (let guard = 0; guard < 60; guard++) {
     let improved = false;
     outer:
@@ -910,7 +1059,7 @@ export function optimizeDay(state, weekday, weekMon, fairness = null) {
         const trialF = fre.filter((_, k) => k !== i && k !== j);
         trialF.push(mkChain(state, [...A.tasks, ...B.tasks]));
         const t = evalPlan(skl, trialF);
-        if (t.cost < plan.cost - 0.5) { fre = trialF; plan = t; improved = true; break outer; }
+        if (accept(t)) { fre = trialF; plan = t; improved = true; break outer; }
       }
     if (!improved) {
       skmerge:
@@ -929,7 +1078,7 @@ export function optimizeDay(state, weekday, weekMon, fairness = null) {
           const trialS = skl.map((c, x) => (x === k ? mkChain(state, [...c.tasks, ...F.tasks], c) : c));
           const trialF = fre.filter((_, x) => x !== i);
           const t = evalPlan(trialS, trialF);
-          if (t.cost < plan.cost - 0.5) { skl = trialS; fre = trialF; plan = t; improved = true; break skmerge; }
+          if (accept(t)) { skl = trialS; fre = trialF; plan = t; improved = true; break skmerge; }
         }
     }
     if (!improved) break;
