@@ -21,6 +21,12 @@ export const DEFAULT_SETTINGS = {
   estSpeedKmh: 50,      // km/h: used for straight-line travel time estimates
   fallbackLegMin: 12,   // min: deadhead when there is neither a matrix nor coordinates
   preferredBias: 1000,  // HUF: penalty when a driver is put on a bus other than their usual one (0 disables it)
+  /* How hard the optimizer pushes work off an over-loaded driver and onto an
+     under-loaded one. Measured in paid minutes against each driver's availability-
+     weighted share, and priced in the same forint-ish units as preferredBias, so the
+     two can be weighed against each other. 0 disables it and restores pure
+     cost-minimising behaviour. */
+  fairnessBias: 5000,
   defaultBaseId: null,  // the club depot; a vehicle's own baseId overrides it
 };
 

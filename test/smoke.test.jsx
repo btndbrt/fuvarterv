@@ -102,6 +102,26 @@ describe("App renders end to end", () => {
     expect(storage.sets).toHaveLength(0);
   });
 
+  /* The print sheets live at the app shell, not inside a screen, because the print
+     stylesheet hides the header, the tabs and <main>. That makes the event the only
+     thing connecting the button to the overlay, and an event nobody listens to fails
+     silently. */
+  test("the print event opens the day sheets over the app", async () => {
+    window.storage = fakeStorage(seedState());
+    await mount();
+    expect(container.querySelector(".print-overlay")).toBe(null);
+
+    await act(async () => {
+      window.dispatchEvent(new CustomEvent("fuvarterv:print", { detail: { dateISO: "2025-01-08" } }));
+    });
+    expect(container.querySelector(".print-overlay")).toBeTruthy();
+    expect(container.textContent).toContain("Napi lapok");
+
+    const close = [...container.querySelectorAll(".print-bar button")][0];
+    await act(async () => { close.click(); });
+    expect(container.querySelector(".print-overlay")).toBe(null);
+  });
+
   test("an empty workspace IS seeded and persisted", async () => {
     const storage = fakeStorage(null);
     window.storage = storage;

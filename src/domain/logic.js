@@ -66,6 +66,20 @@ export function rideWindow(state, ride, training) {
   return [first, Math.max(first + 1, end)];
 }
 
+/* One driver's rides on one date, in the order they are actually driven.
+
+   The driver tab and the printed sheets both read through here on purpose: what a
+   driver sees on their phone and what they are handed on paper must be the same
+   list, in the same order, or the sheet is worse than useless. */
+export function driverDayRides(state, driverId, dateISO) {
+  const wd = weekdayIdx(dateISO);
+  return state.rides
+    .filter((r) => r.driverId === driverId)
+    .map((r) => ({ ride: r, training: byId(state.trainings, r.trainingId) }))
+    .filter(({ ride, training }) => training && (training.type === "weekly" ? ride.day === wd : training.date === dateISO))
+    .sort((a, b) => rideWindow(state, a.ride, a.training)[0] - rideWindow(state, b.ride, b.training)[0]);
+}
+
 export function occursOnSameDay(rA, tA, rB, tB) {
   if (tA.type === "once" && tB.type === "once") return tA.date === tB.date;
   // A one-off training with no date cannot be placed in the week at all.
