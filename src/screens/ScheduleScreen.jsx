@@ -4,15 +4,16 @@
    and renders the result. */
 
 import { useState, useMemo } from "react";
-import { Plus, AlertTriangle, X, ChevronsRight, Lock, Unlock, Zap, ArrowLeftRight, Settings2, Table, ClipboardCheck } from "lucide-react";
+import { Plus, AlertTriangle, X, ChevronsRight, Lock, Unlock, Zap, ArrowLeftRight, Settings2, Table, ClipboardCheck, Warehouse, Printer, CalendarRange, Scale } from "lucide-react";
 import { DAYS, uid, byId } from "../domain/constants.js";
-import { mondayOf, weekdayIdx, minToTime, fmtDateFull } from "../domain/datetime.js";
+import { mondayOf, weekdayIdx, minToTime, fmtDateFull, toISO, addDays } from "../domain/datetime.js";
 import { locName, matrixKey, computeMatrix } from "../domain/geo.js";
-import { resolveDay, dayStats, optimizeDay, withGeneratedRides, driverAvailableFor, driverPay, chainUse } from "../domain/optimizer.js";
+import { resolveDay, dayStats, optimizeDay, optimizeWeek, withGeneratedRides, driverAvailableFor, driverPay, chainUse, depotLegs } from "../domain/optimizer.js";
 import { baseOf } from "../domain/logic.js";
 import { fmtFt, fmtH } from "../ui/format.js";
 import { Field, NumField, Modal, PlateChip, TeamDot, EmptyState, InfoDot } from "../ui/base.jsx";
 import { VignettePill } from "../ui/VignettePill.jsx";
+import { driversWithWork } from "./PrintSheets.jsx";
 
 /* ---------- Schedule ---------- */
 
@@ -25,7 +26,7 @@ export function taskHardIssues(state, weekday, t) {
   return out;
 }
 
-export function TaskRow({ state, task: t, locked, inChain, onLock, onMove, reasons }) {
+export function TaskRow({ state, task: t, locked, chainLocked, inChain, onLock, onMove, reasons }) {
   const team = byId(state.teams, t.teamId);
   const body = (
     <div className="flex items-center gap-2 flex-wrap">
@@ -38,8 +39,15 @@ export function TaskRow({ state, task: t, locked, inChain, onLock, onMove, reaso
       </span>
       <span className="flex gap-1 ml-auto">
         {inChain && (
-          <button className="iconbtn" style={{ width: 32, height: 32, ...(locked ? { background: "var(--surface-inv)", color: "var(--on-inv)", borderColor: "var(--surface-inv)" } : {}) }}
-            onClick={onLock} aria-label={locked ? "Zárolás feloldása" : "Zárolás"}>
+          /* Inside a locked chain the task is already held by the chain, so its own
+             switch would promise something it cannot deliver. It is shown locked and
+             disabled, with the reason on hover, rather than hidden — a control that
+             vanishes reads as a bug. */
+          <button className="iconbtn" disabled={chainLocked}
+            style={{ width: 32, height: 32, ...(locked ? { background: "var(--surface-inv)", color: "var(--on-inv)", borderColor: "var(--surface-inv)" } : {}) }}
+            onClick={onLock}
+            title={chainLocked ? "Az egész lánc zárolva van — a feloldás a lánc fejlécében van." : ""}
+            aria-label={locked ? "Zárolás feloldása" : "Zárolás"}>
             {locked ? <Lock size={14} /> : <Unlock size={14} />}
           </button>
         )}
@@ -72,12 +80,32 @@ export function TaskRow({ state, task: t, locked, inChain, onLock, onMove, reaso
   );
 }
 
-export function ChainCard({ state, chain: c, onLock, onMove }) {
+/* One depot run, drawn in the same line style as a deadhead between two tasks,
+   because that is exactly what it is: an empty trip somebody is paid for.
+
+   "Kiállás" and "beállás" are the trade's own words for leaving the depot and
+   coming back, so they are what the drivers expect to read. */
+export function DepotLine({ state, leg, kind }) {
+  const out = kind === "out";
+  return (
+    <div className="linkline" title={out ? "Kiállás a telephelyről" : "Beállás a telephelyre"}>
+      <Warehouse size={13} />
+      <span className="tnum">{minToTime(out ? leg.depart : leg.arrive)}</span>
+      {out ? "kiállás" : "beállás"}: {locName(state, leg.fromId)} → {locName(state, leg.toId)} ({leg.min} p üresjárat)
+    </div>
+  );
+}
+
+export function ChainCard({ state, chain: c, onLock, onMove, onToggleChainLock }) {
   /* The same formula the daily summary uses: paid time is the depot-to-depot shift,
      not the span of the tasks. Computed separately, the card and the day's total
      would drift apart. */
-  const { paid, cost, shifts } = driverPay(state, c.driver, [chainUse(c, c.driverId, c.vehicleId)]);
+  const use = chainUse(c, c.driverId, c.vehicleId);
+  const { paid, cost, shifts } = driverPay(state, c.driver, [use]);
   const span = shifts[0];
+  /* Derived here, not stored on the chain: the depot comes from the vehicle (or
+     the club default), so it follows a change of either with nothing to migrate. */
+  const legs = depotLegs(state, use);
   const fromBase = span && (span.start !== c.start || span.end !== c.end);
   return (
     <div className="card mb-3 overflow-hidden">
@@ -87,6 +115,16 @@ export function ChainCard({ state, chain: c, onLock, onMove }) {
         {c.vehicle?.hasVignette && <VignettePill />}
         {c.vehicle && <span className="text-xs" style={{ color: "var(--on-inv)", opacity: .7 }}>{c.vehicle.seats} fh</span>}
         <span className="tnum ml-auto text-base">{minToTime(c.start)}–{minToTime(c.end)}</span>
+        {onToggleChainLock && (
+          <button className="header-ic" onClick={onToggleChainLock}
+            aria-pressed={!!c.locked}
+            aria-label={c.locked ? "Lánc feloldása" : "Lánc zárolása"}
+            title={c.locked
+              ? "A lánc zárolva: az optimalizálás nem rendezi át, és nem veszi el a sofőrt vagy a járművet. Új feladatot még hozzáfűzhet."
+              : "Zárolja az egész láncot: marad a feladatok összetétele, a sofőr és a jármű."}>
+            {c.locked ? <Lock size={17} /> : <Unlock size={17} />}
+          </button>
+        )}
       </div>
       <div className="px-3 py-1 text-xs flex gap-3 flex-wrap" style={{ color: "var(--ink2)", borderBottom: "1px solid var(--line)" }}>
         <span>fizetett: <b>{fmtH(paid)}</b>{paid > (span ? span.end - span.start : c.end - c.start) ? " (min. műszak)" : ""}</span>
@@ -102,9 +140,10 @@ export function ChainCard({ state, chain: c, onLock, onMove }) {
         </div>
       )}
       <div className="rail p-3 flex flex-col gap-1">
+        {legs && <DepotLine state={state} leg={legs.out} kind="out" />}
         {c.tasks.map((t, i) => (
           <div key={t.id}>
-            <TaskRow state={state} task={t} locked={t.locked} inChain
+            <TaskRow state={state} task={t} locked={t.locked || c.locked} chainLocked={c.locked} inChain
               onLock={() => onLock(t.id)} onMove={() => onMove(t)} />
             {i < c.links.length && (
               <div className="linkline">
@@ -116,6 +155,7 @@ export function ChainCard({ state, chain: c, onLock, onMove }) {
             )}
           </div>
         ))}
+        {legs && <DepotLine state={state} leg={legs.back} kind="back" />}
       </div>
     </div>
   );
@@ -241,6 +281,101 @@ function ProposalModal({ state, before, out, onApply, onClose }) {
   );
 }
 
+/* The week proposal. Deliberately not a seven-fold version of the daily modal: at
+   that size nobody reads chains, they read who is working how much. So the fairness
+   table comes first, the day-by-day summary second, and the chains stay on the daily
+   screen where they can actually be edited. */
+function WeekProposalModal({ state, out, onApply, onClose }) {
+  const a = out.totalsBefore, b = out.totals;
+  const rows = state.drivers
+    .map((d) => ({
+      d,
+      before: out.fairness.before.get(d.id) || 0,
+      after: out.fairness.after.get(d.id) || 0,
+      share: out.fairness.shares.get(d.id) || 0,
+    }))
+    .filter((r) => r.before > 0 || r.after > 0 || r.share > 0)
+    .sort((x, y) => y.after - x.after);
+
+  return (
+    <Modal title="Heti optimalizálás — előtte / utána" onClose={onClose}>
+      <table className="cmp mb-3">
+        <thead><tr><th></th><th>Jelenlegi</th><th>Javasolt</th></tr></thead>
+        <tbody>
+          <CmpRow label="Láncok a héten" va={a.chains} vb={b.chains} />
+          <CmpRow label="Fizetett idő" va={fmtH(a.paidMin)} vb={fmtH(b.paidMin)} />
+          <CmpRow label="Becsült költség" va={fmtFt(a.cost)} vb={fmtFt(b.cost)} />
+          <CmpRow label="Fedetlen feladat" va={a.uncovered} vb={b.uncovered} />
+          {/* 0 = mindenki pontosan a rá jutó részt viszi; 1 = valaki egy teljes
+              résszel többet vagy kevesebbet. */}
+          <CmpRow label="Egyenlőtlenség" va={out.fairness.imbalanceBefore.toFixed(2)} vb={out.fairness.imbalanceAfter.toFixed(2)} />
+        </tbody>
+      </table>
+
+      <h4 className="disp text-sm mb-2 flex items-center gap-1"><Scale size={15} /> Munka eloszlása</h4>
+      {out.fairness.bias === 0 && (
+        <div className="banner banner-warn mb-2"><AlertTriangle size={15} />
+          A kiegyenlítés ki van kapcsolva (⚙ → „Egyenletes terhelés súlya” = 0), így csak a költség számít.
+        </div>
+      )}
+      <table className="cmp mb-3">
+        <thead><tr><th>Sofőr</th><th>Eddig</th><th>Javasolt</th><th>Arányos rész</th></tr></thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.d.id}>
+              <td>{r.d.name}</td>
+              <td className="b">{fmtH(r.before)}</td>
+              <td className="b">{fmtH(r.after)}</td>
+              <td style={{ color: "var(--ink2)" }}>{fmtH(Math.round(r.share))}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {rows.length === 0 && <EmptyState>Ezen a héten nincs fuvarfeladat.</EmptyState>}
+
+      <h4 className="disp text-sm mb-2">Napok</h4>
+      <div className="flex flex-col gap-1 mb-3">
+        {out.days.map((r, i) => (
+          <div key={i} className="flex items-center gap-2 text-sm">
+            <span style={{ minWidth: 78 }}>{DAYS[i]}</span>
+            {r.empty
+              ? <span style={{ color: "var(--ink2)" }}>nincs edzés</span>
+              : <>
+                  <span>{r.stats.chains} lánc · {r.stats.drivers} sofőr</span>
+                  <span className="ml-auto tnum">{fmtFt(r.stats.cost)}</span>
+                </>}
+          </div>
+        ))}
+      </div>
+
+      {!out.converged && (
+        <div className="banner banner-warn mb-2"><AlertTriangle size={15} />
+          A kiegyenlítés nem állt be teljesen — futtasd le még egyszer, ha tovább finomítanád.
+        </div>
+      )}
+      {out.uncovered.length > 0 && (
+        <div className="banner banner-danger mb-2" style={{ display: "block" }}>
+          <b>Nem fedhető le ({out.uncovered.length}):</b>
+          {out.uncovered.slice(0, 8).map((u, i) => (
+            <div key={i} className="mt-1">• {DAYS[u.weekday]} — {u.task.label}: {u.reasons.join(" ")}</div>
+          ))}
+          {out.uncovered.length > 8 && <div className="mt-1">• …és még {out.uncovered.length - 8}. A napi nézetben mind látszik.</div>}
+        </div>
+      )}
+      {out.notes.map((n, i) => <div key={i} className="banner banner-warn mb-2"><AlertTriangle size={15} />{n}</div>)}
+
+      <div className="flex gap-2 mt-3">
+        <button className="btn btn-pri flex-1" onClick={onApply}>Alkalmazás az egész hétre</button>
+        <button className="btn btn-ghost" onClick={onClose}>Mégse</button>
+      </div>
+      <p className="text-xs mt-2" style={{ color: "var(--ink2)" }}>
+        A zárolt láncokat és feladatokat ez is megőrzi. A hét minden napjának beosztását felülírja,
+        de fuvarokat nem generál — azt naponként, a „Fuvarok generálása” gombbal teheted meg.
+      </p>
+    </Modal>
+  );
+}
+
 export function ScheduleScreen({ state, update }) {
   const weekMon = mondayOf(new Date());
   const [weekday, setWeekday] = useState(weekdayIdx(new Date()));
@@ -251,6 +386,8 @@ export function ScheduleScreen({ state, update }) {
   const [msg, setMsg] = useState("");
   const [confirmGen, setConfirmGen] = useState(false);
   const [busyOpt, setBusyOpt] = useState(false);
+  const [weekProposal, setWeekProposal] = useState(null);
+  const [busyWeek, setBusyWeek] = useState(false);
 
   const res = useMemo(() => resolveDay(state, weekday, weekMon), [state, weekday]);
   const curStats = useMemo(() => dayStats(state, res.chains), [state, res]);
@@ -281,6 +418,39 @@ export function ScheduleScreen({ state, update }) {
     }, 0));
   };
 
+  /* The week runs seven days several times over, so it is slower than the daily
+     button by roughly an order of magnitude. Same trick as doOptimize: yield a frame
+     first so the button can paint its busy state instead of looking dead. */
+  const doOptimizeWeek = () => {
+    setBusyWeek(true);
+    requestAnimationFrame(() => setTimeout(() => {
+      setWeekProposal(optimizeWeek(state, weekMon));
+      setBusyWeek(false);
+    }, 0));
+  };
+
+  const applyWeekProposal = () => {
+    const out = weekProposal;
+    update((s) => ({
+      ...s,
+      assignments: out.days.reduce((acc, r, d) => ({
+        ...acc,
+        [d]: {
+          chains: (r.chains || []).map((c) => ({
+            id: c.id || uid(), driverId: c.driverId, vehicleId: c.vehicleId,
+            locked: !!c.locked,
+            taskIds: c.tasks.map((t) => ({ id: t.id, locked: !!t.locked })),
+          })),
+        },
+      }), { ...s.assignments }),
+      /* Rides are deliberately NOT regenerated here. Doing it for seven days at once
+         would silently replace a week of fuvarok, including days the user had already
+         adjusted by hand. The daily button stays the place that commits rides. */
+    }));
+    setWeekProposal(null);
+    setMsg("A heti beosztás alkalmazva. A fuvarokat naponként, a „Fuvarok generálása” gombbal rögzítheted.");
+  };
+
   const applyProposal = () => {
     const out = proposal.out;
     update((s) => ({
@@ -290,6 +460,9 @@ export function ScheduleScreen({ state, update }) {
         [weekday]: {
           chains: (out.chains || []).map((c) => ({
             id: c.id || uid(), driverId: c.driverId, vehicleId: c.vehicleId,
+            /* The chain-level lock has to survive the round trip, or optimising once
+               would quietly unlock every chain the user had settled. */
+            locked: !!c.locked,
             taskIds: c.tasks.map((t) => ({ id: t.id, locked: !!t.locked })),
           })),
         },
@@ -302,11 +475,29 @@ export function ScheduleScreen({ state, update }) {
 
   /* (Re)generate rides from the day's current schedule, after any manual edits. */
   const rideCount = res.chains.reduce((a, c) => a + c.tasks.length, 0);
+  /* The printed sheets come from the SAVED rides, not from the chains on screen, so
+     they are counted separately: a freshly optimised day has chains but no rides
+     until "Fuvarok generálása" has been run, and printing then would hand out blank
+     paper. */
+  const dayISO = toISO(addDays(weekMon, weekday));
+  const sheetCount = useMemo(() => driversWithWork(state, dayISO).length, [state, dayISO]);
   const doGenerate = () => {
     update((s) => ({ ...s, rides: withGeneratedRides(s, weekday, weekMon, res.chains) }));
     setConfirmGen(false);
     setMsg(`${rideCount} fuvar rögzítve a beosztásból — a Hét és a Sofőr nézetben megjelennek.`);
   };
+
+  /* Lock or release a whole chain. Locking does NOT seal it: the optimizer may still
+     append compatible work, and whatever it appends comes back unlocked. */
+  const toggleChainLock = (chainId) => update((s) => ({
+    ...s,
+    assignments: {
+      ...s.assignments,
+      [weekday]: {
+        chains: (s.assignments[weekday]?.chains || []).map((ch) => (ch.id === chainId ? { ...ch, locked: !ch.locked } : ch)),
+      },
+    },
+  }));
 
   const toggleLock = (taskId) => update((s) => ({
     ...s,
@@ -362,6 +553,8 @@ export function ScheduleScreen({ state, update }) {
             <NumField label="Alap üresjárat adat híján (perc)" value={state.settings.fallbackLegMin} min={0} onCommit={(v) => setSetting("fallbackLegMin", v)} />
             <NumField label="Preferált jármű súlya (Ft)" hint="Mennyire ragaszkodjon a sofőr saját buszához. 0 = kikapcsolva."
               value={state.settings.preferredBias} min={0} onCommit={(v) => setSetting("preferredBias", v)} />
+            <NumField label="Egyenletes terhelés súlya (Ft)" hint="Mennyire ossza el a munkát egyenletesen a sofőrök között, a fizetett idő alapján. 0 = kikapcsolva, csak a költség számít."
+              value={state.settings.fairnessBias} min={0} onCommit={(v) => setSetting("fairnessBias", v)} />
           </div>
           <Field label="Klub telephelye" hint="Innen indulnak a buszok, ha a járműnél nincs saját telephely megadva. A fizetett idő a telephelytől a visszaérkezésig tart.">
             <select className="inp" value={state.settings.defaultBaseId || ""} onChange={(e) => setSetting("defaultBaseId", e.target.value || null)}>
@@ -425,11 +618,25 @@ export function ScheduleScreen({ state, update }) {
         <button className="btn btn-ghost" onClick={doMatrix} disabled={busyMx}><Table size={16} /> {busyMx ? "Számítás…" : "Mátrix"}</button>
       </div>
       <div className="flex gap-2 mb-2 items-center">
+        <button className="btn btn-ghost flex-1" onClick={doOptimizeWeek} disabled={busyWeek}>
+          <CalendarRange size={16} /> {busyWeek ? "Számítás…" : "Heti optimalizálás"}
+        </button>
+        <InfoDot align="r" text="Az egész hetet egyszerre osztja be, és a munkát arányosan elosztja a sofőrök között — a napi gomb csak ezt az egy napot látja. A súlyát a ⚙ panelben állíthatod." />
+      </div>
+      <div className="flex gap-2 mb-2 items-center">
         <button className="btn btn-ghost flex-1" onClick={() => setConfirmGen(true)} disabled={rideCount === 0}
           title={rideCount === 0 ? "Előbb rendelj feladatokat láncokba (optimalizálás vagy kézi áthelyezés)." : ""}>
           <ClipboardCheck size={16} /> Fuvarok generálása a beosztásból
         </button>
         <InfoDot align="r" text="A kész beosztásból tényleges fuvarokat készít, amiket a sofőrök is látnak. Akkor futtasd, ha kész a napi lánc." />
+      </div>
+      <div className="flex gap-2 mb-2 items-center">
+        <button className="btn btn-ghost flex-1" disabled={sheetCount === 0}
+          title={sheetCount === 0 ? "Erre a napra még nincsenek fuvarok — előbb generáld őket a beosztásból." : ""}
+          onClick={() => window.dispatchEvent(new CustomEvent("fuvarterv:print", { detail: { dateISO: dayISO } }))}>
+          <Printer size={16} /> Napi lapok nyomtatása{sheetCount > 0 ? ` (${sheetCount} sofőr)` : ""}
+        </button>
+        <InfoDot align="r" text="Sofőrönként egy lap, a nap fuvaraival és a telephelyi ki- és beállással. A böngésző nyomtatási ablakában PDF-be is mentheted." />
       </div>
       <p className="text-xs mb-3 px-1" style={{ color: "var(--ink2)" }}>
         {state.matrix
@@ -440,7 +647,8 @@ export function ScheduleScreen({ state, update }) {
       {res.skipped.map((sk, i) => <div key={i} className="banner banner-warn mb-2"><AlertTriangle size={16} />{sk}</div>)}
 
       {res.chains.map((c) => (
-        <ChainCard key={c.id} state={state} chain={c} onLock={toggleLock} onMove={setMoveTask} />
+        <ChainCard key={c.id} state={state} chain={c} onLock={toggleLock} onMove={setMoveTask}
+          onToggleChainLock={() => toggleChainLock(c.id)} />
       ))}
       {res.chains.length === 0 && res.tasks.length > 0 && (
         <EmptyState>Ezen a napon még nincs beosztás. Futtasd az optimalizálást, vagy helyezz át feladatot kézzel.</EmptyState>
@@ -464,6 +672,10 @@ export function ScheduleScreen({ state, update }) {
           onToChain={(cid) => { moveToChain(moveTask.id, cid); setMoveTask(null); }}
           onToNew={(d, v) => { moveToNew(moveTask.id, d, v); setMoveTask(null); }}
           onToUnassigned={() => { moveToUnassigned(moveTask.id); setMoveTask(null); }} />
+      )}
+      {weekProposal && (
+        <WeekProposalModal state={state} out={weekProposal}
+          onApply={applyWeekProposal} onClose={() => setWeekProposal(null)} />
       )}
       {proposal && (
         <ProposalModal state={state} before={proposal.before} out={proposal.out}

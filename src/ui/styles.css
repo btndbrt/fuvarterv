@@ -250,3 +250,38 @@
 .help-ic{width:40px;height:40px;border-radius:12px;background:var(--acc-soft);color:var(--acc);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
 :focus-visible{outline:2px solid var(--acc);outline-offset:2px;}
 @media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important;}}
+
+/* ---------- Printed day sheets ----------
+   On screen this is an ordinary scrolling panel. In print the app shell disappears,
+   the panel stops being a panel, and each driver's section claims its own page.
+
+   Nothing below depends on background graphics surviving. Browsers let the reader
+   switch those off, and a dark card header printed without its background is white
+   text on white paper — so for print the headers are turned back into ink on white
+   rather than trusted to keep their fill. */
+.print-overlay{position:fixed;inset:0;z-index:60;background:var(--paper);overflow:auto;}
+.print-bar{position:sticky;top:0;z-index:1;display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:10px 16px;background:var(--card);border-bottom:1px solid var(--line);}
+.print-page{max-width:760px;margin:0 auto;padding:20px 16px 60px;}
+.print-sheet{margin-bottom:34px;}
+.print-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding-bottom:10px;border-bottom:2px solid var(--ink);margin-bottom:10px;}
+.print-summary{display:flex;gap:14px;flex-wrap:wrap;font-size:13px;color:var(--ink2);margin-bottom:14px;}
+
+@media print{
+  @page{size:A4 portrait;margin:12mm;}
+  .ft-root>header,.ft-root>main,.ft-root>nav,.noprint{display:none!important;}
+  .print-overlay{position:static!important;overflow:visible!important;background:#fff!important;}
+  .print-page{max-width:none;margin:0;padding:0;}
+  .print-sheet{margin:0;break-after:page;page-break-after:always;}
+  .print-sheet:last-child{break-after:auto;page-break-after:auto;}
+  .card{break-inside:avoid;page-break-inside:avoid;box-shadow:none!important;border:1px solid #999!important;}
+  .rail-row{break-inside:avoid;page-break-inside:avoid;}
+  .print-sheet .cardhead{background:#fff!important;color:#000!important;border-bottom:2px solid #000;}
+  .print-sheet .cardhead .disp,.print-sheet .cardhead .text-sm,.print-sheet .cardhead .text-xs{color:#000!important;opacity:1!important;}
+  .print-sheet .dirpill{background:#fff!important;color:#000!important;border-color:#000!important;}
+  /* A colour-coded dot is meaningless once the fill is dropped, so ring it too. */
+  .tdot{outline:1px solid #000;outline-offset:1px;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  .plate{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  /* Phone-sized type is oversized on A4, but stays big enough to read at arm's length. */
+  .print-sheet .rail-row .tnum{font-size:20px!important;}
+  .print-sheet .rail-row .font-semibold{font-size:15px!important;}
+}

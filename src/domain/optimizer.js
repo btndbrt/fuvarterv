@@ -12,7 +12,7 @@
 import { DAYS, byId, uid } from "./constants.js";
 import { timeToMin, minToTime } from "./datetime.js";
 import { legMin, locName } from "./geo.js";
-import { weekOccurrences, legFor, legSource, taskNeedsVignette, chainNeedsVignette, vignetteVenues, baseOf } from "./logic.js";
+import { weekOccurrences, legFor, legSource, taskNeedsVignette, chainNeedsVignette, vignetteVenues, baseOf, rideWindow } from "./logic.js";
 
 /* Held-Karp: the shortest order that visits every station.
    pre/post pin a point before/after the chain (typically the venue);
@@ -365,13 +365,82 @@ export const chainFrom = (c) => c.tasks[0].from;
 export const chainTo = (c) => c.tasks[c.tasks.length - 1].to;
 export const chainUse = (c, driverId, vehicleId) => ({ driverId, vehicleId, start: c.start, end: c.end, from: chainFrom(c), to: chainTo(c) });
 
+/* The two depot runs bracketing one occupancy: out to the first pickup, and back
+   from the last drop-off. Null when no depot applies, which is exactly the case
+   where paid time is measured from the tasks themselves.
+
+   DERIVED, never stored. A depot run is a function of the vehicle's depot and the
+   occupancy's endpoints, so computing it at display time keeps one source of
+   truth: change a vehicle's depot and every view follows with nothing to migrate.
+   Writing these legs into rides would also drop them into the ride editor's stop
+   list, where they could be edited into something the pay calculation never agreed
+   to. */
+export function depotLegs(state, u) {
+  const baseId = baseOf(state, u.vehicleId);
+  if (!baseId) return null;
+  const outMin = legMin(state, baseId, u.from);
+  const backMin = legMin(state, u.to, baseId);
+  /* Each leg repeats baseId rather than leaving it on the parent alone: callers
+     hand a single leg to a renderer, and a leg that cannot name its own depot is
+     one that quietly prints a question mark. */
+  return {
+    baseId,
+    out: { baseId, fromId: baseId, toId: u.from, min: outMin, depart: u.start - outMin, arrive: u.start },
+    back: { baseId, fromId: u.to, toId: baseId, min: backMin, depart: u.end, arrive: u.end + backMin },
+  };
+}
+
 /* A chain's DEPOT-TO-DEPOT span: the driver starts work on leaving the depot and
    finishes on getting back. With no depot the span equals the tasks' own, which is
-   exactly the calculation used before depots existed. */
+   exactly the calculation used before depots existed.
+
+   Expressed through depotLegs so the schedule's printed depot times and the paid
+   time they are billed under can never disagree. */
 export function spanOf(state, u) {
-  const base = baseOf(state, u.vehicleId);
-  if (!base) return { start: u.start, end: u.end };
-  return { start: u.start - legMin(state, base, u.from), end: u.end + legMin(state, u.to, base) };
+  const d = depotLegs(state, u);
+  if (!d) return { start: u.start, end: u.end };
+  return { start: d.out.depart, end: d.back.arrive };
+}
+
+/* One ride's occupancy of its driver and vehicle, in the shape spanOf and
+   depotLegs expect. The endpoints depend on direction: an outbound run ends at the
+   venue, a return run starts there. */
+export function rideUse(state, ride, training) {
+  const [start, end] = rideWindow(state, ride, training);
+  const stops = ride.stops || [];
+  const vissza = (ride.dir || "oda") === "vissza";
+  return {
+    driverId: ride.driverId, vehicleId: ride.vehicleId, start, end,
+    from: vissza ? training.venueId : (stops[0]?.stationId || null),
+    to: vissza ? (stops[stops.length - 1]?.stationId || null) : training.venueId,
+  };
+}
+
+/* A driver's day split into SHIFTS: rides whose depot-to-depot spans touch are one
+   turn-out, because there is no time to go home in between.
+
+   This is deliberately the same rule mergeShifts applies to pay, so the depot times
+   a driver reads off their sheet and the hours the club is billed for cannot
+   disagree. Each group carries the depot run that opens it and the one that closes
+   it, taken from its first and last ride — those are the two trips actually driven.
+   A group's own vehicle decides the depot, so a driver changing bus mid-shift still
+   gets the right one at each end. */
+export function driverDayShifts(state, entries) {
+  const rows = entries
+    .map((e) => ({ ...e, use: rideUse(state, e.ride, e.training) }))
+    .sort((a, b) => a.use.start - b.use.start);
+  const groups = [];
+  for (const r of rows) {
+    const span = spanOf(state, r.use);
+    const g = groups[groups.length - 1];
+    if (g && span.start <= g.end) { g.rows.push(r); g.end = Math.max(g.end, span.end); continue; }
+    groups.push({ rows: [r], start: span.start, end: span.end });
+  }
+  return groups.map((g) => ({
+    ...g,
+    out: depotLegs(state, g.rows[0].use)?.out || null,
+    back: depotLegs(state, g.rows[g.rows.length - 1].use)?.back || null,
+  }));
 }
 
 /* A driver's shifts: overlapping depot-to-depot spans merge into ONE shift.
@@ -415,6 +484,70 @@ export function onSiteWait(state, uses) {
   return w;
 }
 
+/* ---------------------------------------------------------------------------
+   Fairness: spreading the work, not just pricing it.
+   ---------------------------------------------------------------------------
+   Left to itself the optimizer hires the cheapest legal driver every time, so the
+   lowest wage on the roster runs the whole week and everyone else sits at home.
+   These three functions add a second pull, against paid minutes.
+
+   PAID minutes, not chains or money: it is what a driver actually gives up, and the
+   minimum-shift floor is part of it, because a short call-out still costs them the
+   evening. Money would be the wrong unit — it would make a cheap driver work longer
+   to "catch up" with an expensive one.
+
+   Deterministic throughout. There is no randomness here, despite the feature being
+   described as randomising drivers: the same week must always produce the same
+   schedule, and a penalty gets there without breaking that. */
+
+/* Paid minutes per driver across a set of chains, by the same reckoning that bills
+   them: depot to depot, shifts merged, minimum shift applied. */
+export function paidByDriver(state, chains) {
+  const uses = new Map();
+  for (const c of chains || []) {
+    if (!c.driverId) continue;
+    if (!uses.has(c.driverId)) uses.set(c.driverId, []);
+    uses.get(c.driverId).push(chainUse(c, c.driverId, c.vehicleId));
+  }
+  const out = new Map();
+  for (const [id, us] of uses) out.set(id, driverPay(state, byId(state.drivers, id), us).paid);
+  return out;
+}
+
+/* Each driver's fair share of the paid minutes, weighted by how much of the work
+   they could legally have taken.
+
+   Weighting matters more than it looks. A driver free only on Tuesdays can never
+   reach an equal slice of the week, and a penalty aimed at flat equality would keep
+   pushing work at them to close a gap their own availability makes impossible —
+   over-assigning the least available person, which is the opposite of fair.
+
+   `entries` need only weekday, start and end: enough to ask who could have covered
+   what. */
+export function fairShares(state, entries, totalPaidMin) {
+  const w = new Map();
+  let sum = 0;
+  for (const d of state.drivers) {
+    const n = (entries || []).filter((e) => driverAvailableFor(d, e.weekday, e.start, e.end)).length;
+    w.set(d.id, n);
+    sum += n;
+  }
+  const out = new Map();
+  for (const d of state.drivers) out.set(d.id, sum > 0 ? (totalPaidMin * w.get(d.id)) / sum : 0);
+  return out;
+}
+
+/* The penalty for a driver sitting at `minutes` when their share is `share`.
+
+   Quadratic in the ratio, so the cost of another hour rises the further past their
+   share a driver already is. At exactly their share the marginal pull is
+   2 x bias / share per minute; `bias` is therefore in the same forint-ish units as
+   preferredBias, and 0 turns the whole thing off. Under-worked drivers are not
+   rewarded, only over-worked ones charged: the penalty is what the search is trying
+   to avoid, and pulling work away from one driver necessarily hands it to another. */
+export const fairPenalty = (bias, minutes, share) =>
+  (!bias || share <= 0) ? 0 : bias * ((minutes / share) ** 2);
+
 /* Do two chains using the SAME resource clash? Not overlapping in time is not
    enough: the bus also has to physically get there.
 
@@ -430,8 +563,13 @@ export function resourceClash(state, u, c) {
   return c.end + legMin(state, chainTo(c), u.from) > u.start;                       // c, then u
 }
 
-/* Exact (driver, vehicle) to chain assignment: backtracking search with cost-bound pruning. */
-export function assignResources(state, weekday, freeChains, fixedUse) {
+/* Exact (driver, vehicle) to chain assignment: backtracking search with cost-bound pruning.
+
+   `fairness` is optional: { bias, shares, baseline }. When present, a chain's price
+   carries the change in its driver's fairness penalty as well as the money, where
+   `baseline` is what that driver already has booked elsewhere in the week. Omit it
+   and this behaves exactly as it did before fairness existed. */
+export function assignResources(state, weekday, freeChains, fixedUse, fairness = null) {
   const chains = [...freeChains].sort((a, b) => a.start - b.start);
   let best = null, iter = 0, capped = false;
   const rec = (i, used, acc, cost) => {
@@ -456,15 +594,25 @@ export function assignResources(state, weekday, freeChains, fixedUse) {
            between), the price is only the extra paid time, with no second call-out
            fee. */
         const mine = used.filter((u) => u.driverId === d.id);
-        const delta = driverPay(state, d, [...mine, chainUse(c, d.id, v.id)]).cost
-          - driverPay(state, d, mine).cost;
+        const after = driverPay(state, d, [...mine, chainUse(c, d.id, v.id)]);
+        const before = driverPay(state, d, mine);
+        const delta = after.cost - before.cost;
+        /* Both halves come from the two calls already made for the money, so
+           fairness costs the search nothing extra. */
+        let fair = 0;
+        if (fairness?.bias) {
+          const base = fairness.baseline?.get(d.id) || 0;
+          const share = fairness.shares?.get(d.id) || 0;
+          fair = fairPenalty(fairness.bias, base + after.paid, share)
+            - fairPenalty(fairness.bias, base + before.paid, share);
+        }
         // Soft preferred-vehicle bias: penalize putting a driver on any bus
         // other than their preferred one, so the optimizer keeps drivers on
         // their usual vehicle unless a real constraint (capacity/availability/
         // contention) or a larger true saving makes it worthwhile.
         const offPreferred = d.preferredVehicleId && v.id !== d.preferredVehicleId;
         const bias = offPreferred ? (state.settings.preferredBias || 0) : 0;
-        opts.push({ d, v, cost: delta + bias });
+        opts.push({ d, v, cost: delta + bias + fair });
       }
     }
     opts.sort((x, y) => x.cost - y.cost || x.v.seats - y.v.seats);
@@ -508,7 +656,7 @@ export function resolveDay(state, weekday, weekMon) {
        caller say so, because to a user this reads as "my schedule vanished". */
     if (!ts.length) { droppedChains++; continue; }
     ts.forEach((t) => assigned.add(t.id));
-    const c = mkChain(state, ts, { id: ch.id, driverId: ch.driverId, vehicleId: ch.vehicleId });
+    const c = mkChain(state, ts, { id: ch.id, driverId: ch.driverId, vehicleId: ch.vehicleId, locked: !!ch.locked });
     c.driver = byId(state.drivers, ch.driverId);
     c.vehicle = byId(state.vehicles, ch.vehicleId);
     c.issues = [];
@@ -639,24 +787,37 @@ export function withGeneratedRides(state, weekday, weekMon, chains) {
   return [...kept, ...ridesFromChains(state, weekday, chains)];
 }
 
-/* The entry point for optimising one day. */
-export function optimizeDay(state, weekday, weekMon) {
+/* The entry point for optimising one day.
+
+   `fairness` is optional and comes from optimizeWeek, which knows what each driver
+   already has booked on the other six days. Called without it, the day still
+   balances — just against itself, since one day is all it can see. */
+export function optimizeDay(state, weekday, weekMon, fairness = null) {
   const cur = resolveDay(state, weekday, weekMon);
   const notes = [...cur.skipped];
   if (!cur.tasks.length) return { empty: true, notes };
   const maxSeats = Math.max(0, ...state.vehicles.map((v) => Number(v.seats) || 0));
 
-  // Locked tasks become skeleton chains carrying their driver and vehicle. Untouchable.
+  /* Locked work becomes skeleton chains carrying their driver and vehicle.
+
+     Two kinds of lock feed this. A LOCKED TASK pins that one task. A LOCKED CHAIN
+     pins all of its tasks at once, whatever their own flags say — that is the whole
+     point of it: the run has been settled with the driver, and picking it apart task
+     by task is exactly what the user asked us not to do.
+
+     Neither kind seals the chain. The improvement loop may still append compatible
+     work to a skeleton, and what it appends arrives UNLOCKED, so the next run is free
+     to place it somewhere better. A lock holds what was locked, and no more. */
   const lockedGroups = new Map();
   for (const ch of cur.chains) {
-    const lt = ch.tasks.filter((t) => t.locked);
+    const lt = ch.locked ? ch.tasks : ch.tasks.filter((t) => t.locked);
     if (!lt.length) continue;
     /* Grouped by chain id, NOT by driver|vehicle. The latter fused two deliberately
        separate shifts (a morning and an evening one with the same driver and bus)
        into a single 07:00-20:00 chain with one call-out fee, making both the cost
        estimate and the printed schedule wrong. */
     const k = ch.id || `${ch.driverId}|${ch.vehicleId}`;
-    if (!lockedGroups.has(k)) lockedGroups.set(k, { driverId: ch.driverId, vehicleId: ch.vehicleId, tasks: [] });
+    if (!lockedGroups.has(k)) lockedGroups.set(k, { driverId: ch.driverId, vehicleId: ch.vehicleId, locked: !!ch.locked, tasks: [] });
     lockedGroups.get(k).tasks.push(...lt);
   }
   const lockedIds = new Set([...lockedGroups.values()].flatMap((g) => g.tasks.map((t) => t.id)));
@@ -677,7 +838,7 @@ export function optimizeDay(state, weekday, weekMon) {
   }
 
   const skel = [...lockedGroups.values()].map((gp) =>
-    mkChain(state, gp.tasks, { id: uid(), driverId: gp.driverId, vehicleId: gp.vehicleId, hasLocked: true }));
+    mkChain(state, gp.tasks, { id: uid(), driverId: gp.driverId, vehicleId: gp.vehicleId, hasLocked: true, locked: gp.locked }));
 
   // Phase 1: chaining by minimum-cost flow, gaps weighted by the average wage.
   const wages = state.drivers.map((d) => d.wage || 0);
@@ -719,8 +880,16 @@ export function optimizeDay(state, weekday, weekMon) {
   };
   const fixedUseOf = (sk) => sk.map((c) => chainUse(c, c.driverId, c.vehicleId));
   let anyCapped = false;
+  /* With no week-level view, the day balances against itself: shares are worked out
+     from this day's own chains, and nothing is carried in from elsewhere. */
+  const fair = fairness || (state.settings?.fairnessBias
+    ? { bias: state.settings.fairnessBias, baseline: new Map(),
+        shares: fairShares(state,
+          freeChains.map((c) => ({ weekday, start: c.start, end: c.end })),
+          freeChains.reduce((a, c) => a + (c.end - c.start), 0)) }
+    : null);
   const evalPlan = (skl, fre) => {
-    const asg = assignResources(state, weekday, fre, fixedUseOf(skl));
+    const asg = assignResources(state, weekday, fre, fixedUseOf(skl), fair);
     if (asg.capped) anyCapped = true;
     return { asg, cost: skl.reduce((a, c) => a + skelCost(c), 0) + asg.cost };
   };
@@ -774,4 +943,119 @@ export function optimizeDay(state, weekday, weekMon) {
   result.sort((a, b) => a.start - b.start);
   return { empty: false, chains: result, uncovered, notes, stats: dayStats(state, result),
     improve: { before: objectiveBefore, after: plan.cost } };
+}
+
+/* How many refinement passes the week is allowed before we stop and say so. In
+   practice it settles in two or three; the cap is there so a pathological week
+   cannot spin. */
+export const WEEK_PASSES = 6;
+
+const sumMaps = (maps) => {
+  const out = new Map();
+  for (const m of maps) for (const [k, v] of m) out.set(k, (out.get(k) || 0) + v);
+  return out;
+};
+
+/* How far the worst-off driver is from their share, as a ratio. 0 is perfectly even;
+   1 means somebody is carrying double. Drivers with no share (never available for
+   any of the week's work) are left out — they cannot be balanced. */
+export function imbalanceOf(minutes, shares) {
+  let worst = 0;
+  for (const [id, share] of shares) {
+    if (share <= 0) continue;
+    worst = Math.max(worst, Math.abs((minutes.get(id) || 0) / share - 1));
+  }
+  return worst;
+}
+
+/* The entry point for optimising a WHOLE WEEK.
+
+   Chaining is untouched and stays per-day: a chain never crosses midnight, so the
+   seven days really are independent there, and phase one needs no week-wide view.
+   What the week adds is the fairness tally, which is the one thing a single day
+   cannot see — a driver's share is only meaningful across all the work there is.
+
+   The days are deliberately NOT planned in sequence. That would leave Monday
+   choosing blind and Friday choosing with everything already fixed, so the result
+   would depend on the order the days happened to be visited. Instead every pass
+   re-plans each day against what the OTHER six looked like in the previous pass.
+   No day has priority, and once the passes stop changing anything the answer is
+   independent of where it started. */
+export function optimizeWeek(state, weekMon) {
+  const bias = state.settings?.fairnessBias || 0;
+  const notes = [];
+  let days = DAYS.map((_, d) => optimizeDay(state, d, weekMon));
+  let passes = 0, converged = true;
+
+  /* What the week looks like today, before any of this is applied — the "before"
+     column, worked out from the saved schedule rather than from the proposal. */
+  const beforeDays = DAYS.map((_, d) => resolveDay(state, d, weekMon));
+  const beforeMin = sumMaps(beforeDays.map((r) => paidByDriver(state, r.chains)));
+  const totalsBefore = beforeDays.reduce((a, r) => {
+    const st = dayStats(state, r.chains);
+    return { cost: a.cost + st.cost, paidMin: a.paidMin + st.paidMin,
+      chains: a.chains + st.chains, uncovered: a.uncovered + r.unassigned.length };
+  }, { cost: 0, paidMin: 0, chains: 0, uncovered: 0 });
+
+  const entries = days.flatMap((r, d) => (r.chains || []).map((c) => ({ weekday: d, start: c.start, end: c.end })));
+  const totalPaid = days.reduce((a, r) => a + (r.stats?.paidMin || 0), 0);
+  const shares = fairShares(state, entries, totalPaid);
+
+  if (bias && totalPaid > 0) {
+    /* Two plans are "the same" when every chain has the same crew and the same
+       tasks. Comparing that rather than cost stops the loop chasing rounding. */
+    const sig = (r) => (r.chains || [])
+      .map((c) => `${c.driverId}|${c.vehicleId}|${c.tasks.map((t) => t.id).join(",")}`)
+      .sort().join(";");
+    let prev = days.map(sig).join("#");
+    converged = false;
+
+    /* Each pass walks the days one at a time, re-planning a day against what every
+       OTHER day currently holds — including days already revisited in this same pass.
+
+       Re-planning all seven at once against a single frozen snapshot sounds fairer
+       and is in fact unusable: every day then sees the same least-loaded driver and
+       every day picks them, so the whole week lands on one person and flips to the
+       next on the following pass, for ever. Reacting one at a time is what breaks
+       that tie.
+
+       The starting day rotates per pass so no weekday is permanently the one that
+       chooses first, and a pass that changes nothing is a fixed point: stable no
+       matter which day is asked next. */
+    const perDay = days.map((r) => paidByDriver(state, r.chains));
+    for (passes = 1; passes <= WEEK_PASSES; passes++) {
+      for (let k = 0; k < DAYS.length; k++) {
+        const d = (k + passes - 1) % DAYS.length;
+        const baseline = sumMaps(perDay.filter((_, i) => i !== d));
+        days[d] = optimizeDay(state, d, weekMon, { bias, shares, baseline });
+        perDay[d] = paidByDriver(state, days[d].chains);
+      }
+      const now = days.map(sig).join("#");
+      if (now === prev) { converged = true; break; }
+      prev = now;
+    }
+    if (!converged)
+      notes.push("A heti kiegyenlítés nem állt be teljesen a megengedett körök alatt — a látott beosztás a legjobb megtalált, de egy újabb futtatás még javíthat rajta.");
+  }
+
+  const afterMin = sumMaps(days.map((r) => paidByDriver(state, r.chains)));
+  const totals = days.reduce((a, r) => ({
+    cost: a.cost + (r.stats?.cost || 0),
+    paidMin: a.paidMin + (r.stats?.paidMin || 0),
+    chains: a.chains + (r.stats?.chains || 0),
+    uncovered: a.uncovered + (r.uncovered?.length || 0),
+  }), { cost: 0, paidMin: 0, chains: 0, uncovered: 0 });
+
+  for (const r of days) for (const n of r.notes || []) if (!notes.includes(n)) notes.push(n);
+
+  return {
+    days, totals, totalsBefore, notes, passes, converged,
+    uncovered: days.flatMap((r, d) => (r.uncovered || []).map((u) => ({ ...u, weekday: d }))),
+    fairness: {
+      bias, shares,
+      before: beforeMin, after: afterMin,
+      imbalanceBefore: imbalanceOf(beforeMin, shares),
+      imbalanceAfter: imbalanceOf(afterMin, shares),
+    },
+  };
 }
