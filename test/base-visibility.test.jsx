@@ -43,6 +43,14 @@ function mount(state, update = () => {}) {
   });
 }
 const btn = (text) => [...container.querySelectorAll("button")].find((b) => b.textContent.includes(text));
+/* The standing warnings sit behind a toggle now, so the chains start at the top of
+   the screen. The toggle still carries the count, which is what keeps a missing
+   depot from being silent — but reading the text of a warning means opening it. */
+const openWarnings = () => {
+  const t = btn("figyelmeztetés");
+  if (t) act(() => t.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+  return t;
+};
 
 describe("a telephely hiánya nem maradhat némán", () => {
   test("felvett, de ki nem választott telephely: a baseOf még null", () => {
@@ -54,6 +62,9 @@ describe("a telephely hiánya nem maradhat némán", () => {
     let next = null;
     const s = makeState({ bases: [KLUB] });
     mount(s, (fn) => { next = fn(s); });
+    // Összecsukva is látszik, hogy van mit elintézni — csak a szövege van egy
+    // kattintásra.
+    expect(openWarnings()).toBeTruthy();
     expect(container.textContent).toContain("hazamehet");
     const fix = btn("beállítása klubtelephelynek");
     expect(fix).toBeTruthy();
@@ -63,16 +74,28 @@ describe("a telephely hiánya nem maradhat némán", () => {
 
   test("telephely nélkül a felvételre irányít", () => {
     mount(makeState());
+    openWarnings();
     expect(container.textContent).toContain("Adatok → Telephelyek");
+  });
+
+  test("a figyelmeztetés összecsukva sem néma: a gomb kiírja, hogy van", () => {
+    mount(makeState({ bases: [KLUB] }));
+    const t = btn("figyelmeztetés");
+    expect(t).toBeTruthy();
+    expect(t.textContent).toContain("1 figyelmeztetés");
+    expect(t.getAttribute("aria-expanded")).toBe("false");
+    expect(container.textContent).not.toContain("hazamehet");   // a szöveg még rejtve
   });
 
   test("kiválasztott klubtelephellyel nincs figyelmeztetés", () => {
     mount(makeState({ bases: [KLUB], defaultBaseId: "h1" }));
+    expect(btn("figyelmeztetés")).toBeFalsy();       // nincs mit összecsukni
     expect(container.textContent).not.toContain("hazamehet");
   });
 
   test("a jármű saját telephelye is elég", () => {
     mount(makeState({ bases: [KLUB], vehicleBase: "h1" }));
+    expect(btn("figyelmeztetés")).toBeFalsy();
     expect(container.textContent).not.toContain("hazamehet");
   });
 });

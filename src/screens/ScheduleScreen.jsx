@@ -4,7 +4,7 @@
    and renders the result. */
 
 import { useState, useMemo } from "react";
-import { Plus, AlertTriangle, X, ChevronsRight, Lock, Unlock, Zap, ArrowLeftRight, Settings2, Table, ClipboardCheck, Warehouse, Printer, CalendarRange, Scale } from "lucide-react";
+import { Plus, AlertTriangle, X, ChevronsRight, ChevronDown, Lock, Unlock, Zap, ArrowLeftRight, Settings2, Table, ClipboardCheck, Warehouse, Printer, CalendarRange, Scale } from "lucide-react";
 import { DAYS, uid, byId } from "../domain/constants.js";
 import { mondayOf, weekdayIdx, minToTime, fmtDateFull, toISO, addDays } from "../domain/datetime.js";
 import { locName, matrixKey, computeMatrix } from "../domain/geo.js";
@@ -413,6 +413,7 @@ export function ScheduleScreen({ state, update }) {
   const [showSettings, setShowSettings] = useState(false);
   const [busyMx, setBusyMx] = useState(false);
   const [msg, setMsg] = useState("");
+  const [showWarnings, setShowWarnings] = useState(false);
   const [confirmGen, setConfirmGen] = useState(false);
   const [busyOpt, setBusyOpt] = useState(false);
   const [weekProposal, setWeekProposal] = useState(null);
@@ -565,6 +566,42 @@ export function ScheduleScreen({ state, update }) {
   /* Vehicles with no resolvable depot: neither their own nor the club's. */
   const baseless = state.vehicles.filter((v) => !baseOf(state, v.id));
 
+  /* Every STANDING warning about the day, gathered into one collapsible list so the
+     chains start at the top of the screen instead of below a stack of banners.
+
+     Standing, not transient: `msg` is feedback on a button the user just pressed and
+     stays where they are looking. What collects here is the state of the day, which
+     is true until something is fixed and does not need to be re-read on every visit.
+
+     Collapsed by default, but never silent — the toggle carries the count and keeps
+     the warning colour, because a missing depot quietly changes every figure in the
+     stat row above it (ADR-24: nothing is dropped without saying so). */
+  const warnings = [];
+  if (baseless.length > 0) warnings.push(
+    <div key="baseless" className="banner banner-warn" style={{ display: "block" }}>
+      <div className="flex items-center gap-2">
+        <AlertTriangle size={16} />
+        <b>{baseless.length === state.vehicles.length ? "Egy járműnek sincs telephelye" : `${baseless.length} járműnek nincs telephelye`}</b>
+      </div>
+      <div className="mt-1">
+        Enélkül a beosztás úgy számol, hogy a sofőr két fuvar között hazamehet — távoli helyszínnél ez nem igaz,
+        és a várakozás sem kerül bele a fizetett időbe.
+      </div>
+      {state.bases.length === 0 ? (
+        <div className="mt-1">Vegyél fel telephelyet az <b>Adatok → Telephelyek</b> fülön.</div>
+      ) : !state.settings.defaultBaseId && state.bases.length === 1 ? (
+        <button className="btn btn-ghost mt-2" onClick={() => setSetting("defaultBaseId", state.bases[0].id)}>
+          „{state.bases[0].name}” beállítása klubtelephelynek
+        </button>
+      ) : (
+        <div className="mt-1">Válaszd ki a klub telephelyét a ⚙ panelben, vagy add meg a járműveknél.</div>
+      )}
+    </div>
+  );
+  res.skipped.forEach((sk, i) => warnings.push(
+    <div key={`sk${i}`} className="banner banner-warn"><AlertTriangle size={16} />{sk}</div>
+  ));
+
   return (
     <div className="px-4 pb-4">
       <div className="flex items-center justify-between py-3">
@@ -622,28 +659,16 @@ export function ScheduleScreen({ state, update }) {
         <div className="stat"><b>{fmtFt(curStats.cost)}</b><span>becsült ktg.</span></div>
       </div>
 
-      {/* Telephely nélkül a beosztás a régi módon számol: minden rést fizetetlen
-          szabadidőnek vesz. Ezt a ⚙ panelben is jelezzük, de ott csak az látja,
-          aki kinyitja — a hibás számolás viszont a napi összegeken csapódik le. */}
-      {baseless.length > 0 && (
-        <div className="banner banner-warn mb-3" style={{ display: "block" }}>
-          <div className="flex items-center gap-2">
+      {warnings.length > 0 && (
+        <div className="mb-3">
+          <button type="button" className="banner banner-warn" onClick={() => setShowWarnings(!showWarnings)}
+            aria-expanded={showWarnings}>
             <AlertTriangle size={16} />
-            <b>{baseless.length === state.vehicles.length ? "Egy járműnek sincs telephelye" : `${baseless.length} járműnek nincs telephelye`}</b>
-          </div>
-          <div className="mt-1">
-            Enélkül a beosztás úgy számol, hogy a sofőr két fuvar között hazamehet — távoli helyszínnél ez nem igaz,
-            és a várakozás sem kerül bele a fizetett időbe.
-          </div>
-          {state.bases.length === 0 ? (
-            <div className="mt-1">Vegyél fel telephelyet az <b>Adatok → Telephelyek</b> fülön.</div>
-          ) : !state.settings.defaultBaseId && state.bases.length === 1 ? (
-            <button className="btn btn-ghost mt-2" onClick={() => setSetting("defaultBaseId", state.bases[0].id)}>
-              „{state.bases[0].name}” beállítása klubtelephelynek
-            </button>
-          ) : (
-            <div className="mt-1">Válaszd ki a klub telephelyét a ⚙ panelben, vagy add meg a járműveknél.</div>
-          )}
+            <span>{warnings.length} figyelmeztetés</span>
+            <ChevronDown size={16} className="ml-auto" aria-hidden
+              style={{ transform: showWarnings ? "rotate(180deg)" : "none", transition: "transform .15s" }} />
+          </button>
+          {showWarnings && <div className="flex flex-col gap-2 mt-2">{warnings}</div>}
         </div>
       )}
 
@@ -680,7 +705,6 @@ export function ScheduleScreen({ state, update }) {
           : "Még nincs üresjárati mátrix — addig légvonalas becslés / alapérték megy. A Mátrix gomb egyszer számol, az eredmény eltárolódik."}
       </p>
       {msg && <div className="banner banner-warn mb-3"><Table size={16} />{msg}</div>}
-      {res.skipped.map((sk, i) => <div key={i} className="banner banner-warn mb-2"><AlertTriangle size={16} />{sk}</div>)}
 
       {res.chains.map((c) => (
         <ChainCard key={c.id} state={state} chain={c} place={places.get(c)} onLock={toggleLock} onMove={setMoveTask}

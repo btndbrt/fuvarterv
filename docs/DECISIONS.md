@@ -411,6 +411,13 @@ feature.
 that is the right ratio here. `optimizeDay` even reports when its search hit the iteration
 cap rather than claiming an optimum.
 
+**Where they appear.** On the Beosztás screen the STANDING warnings (skipped tasks, buses
+with no depot) sit behind one toggle under the stat row, collapsed by default. Stacked
+above the chains they pushed the day's actual work off the screen. Folding them away is
+allowed here only because the toggle states the count and keeps the warning colour: a
+reason may be one click away, but never absent. Transient feedback on a button the user
+just pressed stays inline, where they are looking.
+
 **Known violation.** `taskHardIssues` in `ScheduleScreen` duplicates part of the
 feasibility check and omits the vignette case, so a task blocked only by that shows no
 reason. See risk R6 and `ACTION_PLAN.md` P0-2.
