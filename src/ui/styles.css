@@ -187,6 +187,11 @@
 .rail-dot.next{border-color:var(--acc);background:var(--acc);}
 .banner{display:flex;gap:10px;align-items:flex-start;border-radius:14px;padding:12px 14px;font-size:14px;font-weight:600;}
 .banner-warn{background:var(--warn-soft);border:1px solid transparent;color:var(--warn);}
+/* A banner that is also the control opening the rest of them. It keeps the warning
+   colour on purpose: collapsing the list must not make the warnings look resolved. */
+button.banner{width:100%;align-items:center;text-align:left;font:inherit;font-weight:700;font-size:14px;cursor:pointer;}
+button.banner:hover{filter:brightness(.96);}
+button.banner:focus-visible{outline:3px solid var(--acc-soft);outline-offset:2px;}
 .banner-danger{background:var(--danger-soft);border:1px solid transparent;color:var(--danger);}
 .pill{display:inline-flex;align-items:center;gap:4px;border-radius:999px;padding:4px 11px;font-size:12px;font-weight:800;}
 .pill-miss{background:var(--warn-soft);color:var(--warn);}
