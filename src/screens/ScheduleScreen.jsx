@@ -11,7 +11,7 @@ import { locName, matrixKey, computeMatrix } from "../domain/geo.js";
 import { resolveDay, dayStats, optimizeDay, optimizeWeek, withGeneratedRides, driverAvailableFor, driverPay, chainUse, depotLegs, chainShifts } from "../domain/optimizer.js";
 import { baseOf } from "../domain/logic.js";
 import { fmtFt, fmtH } from "../ui/format.js";
-import { Field, NumField, Modal, PlateChip, TeamDot, EmptyState, InfoDot } from "../ui/base.jsx";
+import { Field, NumField, Modal, PlateChip, TeamDot, EmptyState, InfoDot, BusyOverlay } from "../ui/base.jsx";
 import { VignettePill } from "../ui/VignettePill.jsx";
 import { driversWithWork } from "./PrintSheets.jsx";
 
@@ -737,6 +737,13 @@ export function ScheduleScreen({ state, update }) {
           onToChain={(cid) => { moveToChain(moveTask.id, cid); setMoveTask(null); }}
           onToNew={(d, v) => { moveToNew(moveTask.id, d, v); setMoveTask(null); }}
           onToUnassigned={() => { moveToUnassigned(moveTask.id); setMoveTask(null); }} />
+      )}
+      {(busyOpt || busyWeek) && (
+        <BusyOverlay
+          title={busyWeek ? "Heti optimalizálás folyamatban…" : "Optimalizálás folyamatban…"}
+          hint={busyWeek
+            ? "Az egész hét beosztása készül, ez több másodpercig is eltarthat. Kérlek, várj — a javaslat magától megjelenik."
+            : "A beosztás számítása néhány másodpercig tarthat. Kérlek, várj — a javaslat magától megjelenik."} />
       )}
       {weekProposal && (
         <WeekProposalModal state={state} out={weekProposal}

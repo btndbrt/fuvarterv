@@ -208,6 +208,12 @@ button.banner:focus-visible{outline:3px solid var(--acc-soft);outline-offset:2px
 .tabbar button.on{color:var(--on-inv);border-top-color:var(--acc);}
 .modal-bg{position:fixed;inset:0;background:rgba(16,20,28,.5);z-index:50;display:flex;align-items:flex-end;justify-content:center;}
 .modal{background:var(--paper);width:100%;max-width:560px;border-radius:22px 22px 0 0;padding:18px 16px 24px;overflow-y:auto;}
+/* Above modals, the tab bar and info pop-ups: nothing underneath may be used while it is up. */
+.busy-bg{position:fixed;inset:0;background:rgba(16,20,28,.5);z-index:90;display:flex;align-items:center;justify-content:center;padding:24px;cursor:progress;}
+.busy-card{width:100%;max-width:340px;background:var(--card);color:var(--ink);border-radius:var(--r);box-shadow:var(--shadow-lg);padding:26px 22px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:10px;}
+/* Only `transform` is animated, so the spin keeps running while the main thread is blocked. */
+.busy-spin{width:44px;height:44px;border-radius:50%;border:4px solid var(--acc-soft);border-top-color:var(--acc);margin-bottom:6px;will-change:transform;animation:busy-spin .8s linear infinite;}
+@keyframes busy-spin{to{transform:rotate(360deg);}}
 .map-bg{position:fixed;inset:0;background:rgba(16,20,28,.55);z-index:60;display:flex;align-items:stretch;justify-content:center;}
 .map-modal{background:var(--paper);width:100%;height:100%;display:flex;flex-direction:column;font-family:'Nunito',system-ui,sans-serif;color:var(--ink);}
 @media(min-width:640px){
