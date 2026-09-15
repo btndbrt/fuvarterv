@@ -129,8 +129,8 @@ export function PlateChip({ plate }) {
 }
 
 export function TeamDot({ color, size = 12 }) {
-  /* The `tdot` class carries no screen styling: it exists so print CSS can ring
-     the dot, which is otherwise invisible when a browser drops backgrounds. */
+  /* The `tdot` class carries no styling of its own; it is a hook for CSS that needs
+     to find the dot. */
   return <span aria-hidden className="tdot" style={{ width: size, height: size, borderRadius: "50%", background: color, display: "inline-block", flexShrink: 0 }} />;
 }
 

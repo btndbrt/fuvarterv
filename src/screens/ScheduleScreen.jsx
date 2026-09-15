@@ -6,14 +6,14 @@
 import { useState, useMemo } from "react";
 import { Plus, AlertTriangle, X, ChevronsRight, ChevronDown, Lock, Unlock, Zap, ArrowLeftRight, Settings2, Table, Warehouse, Printer, Scale } from "lucide-react";
 import { DAYS, uid, byId } from "../domain/constants.js";
-import { mondayOf, weekdayIdx, minToTime, fmtDateFull, toISO, addDays } from "../domain/datetime.js";
+import { mondayOf, weekdayIdx, minToTime, fmtDateFull, toISO } from "../domain/datetime.js";
 import { locName, matrixKey, computeMatrix } from "../domain/geo.js";
 import { resolveDay, dayStats, optimizeWeek, withGeneratedRides, handRidesReplaced, driverAvailableFor, driverPay, chainUse, depotLegs, chainShifts } from "../domain/optimizer.js";
 import { baseOf } from "../domain/logic.js";
 import { fmtFt, fmtH } from "../ui/format.js";
 import { Field, NumField, Modal, PlateChip, TeamDot, EmptyState, InfoDot, BusyOverlay } from "../ui/base.jsx";
 import { VignettePill } from "../ui/VignettePill.jsx";
-import { driversWithWork } from "./PrintSheets.jsx";
+import { driversWithWeekWork } from "./PrintSheets.jsx";
 
 /* ---------- Schedule ---------- */
 
@@ -418,11 +418,11 @@ export function ScheduleScreen({ state, update }) {
     setMsg("A heti beosztás alkalmazva és a fuvarok rögzítve — a Hét és a Sofőr nézetben is megjelennek.");
   };
 
-  /* The printed sheets come from the SAVED rides, not from the chains on screen, so
-     they are counted separately: a day whose tasks sit in no chain has nothing to
+  /* The printed sheet comes from the SAVED rides, not from the chains on screen, so
+     it is counted separately: a week whose tasks sit in no chain has nothing to
      print, and printing then would hand out blank paper. */
-  const dayISO = toISO(addDays(weekMon, weekday));
-  const sheetCount = useMemo(() => driversWithWork(state, dayISO).length, [state, dayISO]);
+  const weekMonISO = toISO(weekMon);
+  const printCount = useMemo(() => driversWithWeekWork(state, mondayOf(weekMonISO)).length, [state, weekMonISO]);
 
   /* Lock or release a whole chain. Locking does NOT seal it: the optimizer may still
      append compatible work, and whatever it appends comes back unlocked. */
@@ -586,12 +586,12 @@ export function ScheduleScreen({ state, update }) {
         <button className="btn btn-ghost" onClick={doMatrix} disabled={busyMx}><Table size={16} /> {busyMx ? "Számítás…" : "Mátrix"}</button>
       </div>
       <div className="flex gap-2 mb-2 items-center">
-        <button className="btn btn-ghost flex-1" disabled={sheetCount === 0}
-          title={sheetCount === 0 ? "Erre a napra még nincsenek fuvarok — előbb generáld őket a beosztásból." : ""}
-          onClick={() => window.dispatchEvent(new CustomEvent("fuvarterv:print", { detail: { dateISO: dayISO } }))}>
-          <Printer size={16} /> Napi lapok nyomtatása{sheetCount > 0 ? ` (${sheetCount} sofőr)` : ""}
+        <button className="btn btn-ghost flex-1" disabled={printCount === 0}
+          title={printCount === 0 ? "Ezen a héten még nincsenek fuvarok — előbb futtasd és alkalmazd a heti optimalizálást." : ""}
+          onClick={() => window.dispatchEvent(new CustomEvent("fuvarterv:print", { detail: { weekMonISO } }))}>
+          <Printer size={16} /> Heti menetrend nyomtatása{printCount > 0 ? ` (${printCount} sofőr)` : ""}
         </button>
-        <InfoDot align="r" text="Sofőrönként egy lap, a nap fuvaraival és a telephelyi ki- és beállással. A böngésző nyomtatási ablakában PDF-be is mentheted." />
+        <InfoDot align="r" text="Egy kiválasztott sofőr heti fuvarjai táblázatban, a telephelyi ki- és beállással és a fizetett idővel. A böngésző nyomtatási ablakában PDF-be is mentheted." />
       </div>
       <p className="text-xs mb-3 px-1" style={{ color: "var(--ink2)" }}>
         {state.matrix
