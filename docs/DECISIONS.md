@@ -342,6 +342,16 @@ ride for a leg — training plus direction — that no chain covers is kept, bec
 optimiser had nothing to put in its place and deleting it would leave the team with no
 ride at all.
 
+**A ride can be locked from the ride editor.** A ride created on the Week page had no
+lock to offer, so the optimiser was free to replace it. It still has no lock of its
+own: ticking "Zárolás" puts the ride's task in a locked chain with the ride's driver
+and vehicle (`saveLockedRide`), and saves the ride pinned to that task (`taskId`,
+`source: "manual"`). The optimiser keeps the crew because the task is locked; the
+rebuild keeps the ride itself, stops and times included, and generates nothing extra
+for that task. There is still one lock in one place — unlocking the task on the
+Schedule tab releases the ride. A hand-made ride on a leg split across several buses
+cannot be locked from the editor, because it cannot be told which bus it is.
+
 **A ride names its run** (`ride.runId`, the chain's id). Without it the two descriptions
 disagreed again in the one place it mattered: a chain is a single continuous occupancy,
 priced as one turn-out with the bus staying out, but rides are one per task, so the

@@ -913,9 +913,15 @@ Two UI actions trigger this (both in the Schedule screen):
 - **A manual move** (`moveToChain`, `moveToNew`, `moveToUnassigned`) — rebuilds the
   current day's rides from the edited schedule.
 
-> **Gotcha:** manual edits to a ride are overwritten the next time its day is rebuilt.
-> Locks live on the schedule, not on rides: to keep a driver and vehicle, lock the
-> task or chain (a manual move locks it automatically). See ADR-17.
+A ride saved with **"Zárolás"** in the ride editor goes through `saveLockedRide`: its
+task is locked into a chain with the ride's crew, and the ride is saved *pinned*
+(`taskId`, `source: "manual"`). The rebuild keeps a pinned ride as entered while its
+task stays locked, updating only its crew and `runId` from the chain.
+
+> **Gotcha:** manual edits to an unlocked ride are overwritten the next time its day is
+> rebuilt. Locks live on the schedule, not on rides: lock the ride in the editor, or
+> the task or chain on the Schedule tab (a manual move locks it automatically). See
+> ADR-17.
 
 ---
 

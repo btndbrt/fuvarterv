@@ -42,12 +42,12 @@ export function NumField({ label, hint, value, min = 0, onCommit }) {
 /* A boolean field. The native checkbox stays behind the clickable label so keyboard
    and screen-reader support come for free; only the size and colour are restyled to
    match the other fields. */
-export function Check({ label, hint, checked, onChange }) {
+export function Check({ label, hint, checked, onChange, disabled = false }) {
   return (
-    <label className="block mb-3" style={{ cursor: "pointer" }}>
-      <span className="flex items-center gap-2">
-        <input type="checkbox" checked={!!checked} onChange={(e) => onChange(e.target.checked)}
-          style={{ width: 20, height: 20, accentColor: "var(--acc)", cursor: "pointer", flexShrink: 0 }} />
+    <label className="block mb-3" style={{ cursor: disabled ? "default" : "pointer" }}>
+      <span className="flex items-center gap-2" style={disabled ? { opacity: 0.6 } : undefined}>
+        <input type="checkbox" checked={!!checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)}
+          style={{ width: 20, height: 20, accentColor: "var(--acc)", cursor: disabled ? "default" : "pointer", flexShrink: 0 }} />
         <span className="text-sm font-semibold">{label}</span>
       </span>
       {hint && <span className="block text-xs mt-1" style={{ color: "var(--ink2)" }}>{hint}</span>}
