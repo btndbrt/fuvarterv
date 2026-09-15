@@ -197,11 +197,12 @@ export function RideForm({ state, update, training, dayIdx, dateISO, existing, o
           <div className="text-sm flex items-center gap-1" style={{ color: "var(--ink2)" }}>
             <MapPin size={14} /> {venue?.name} <span>· {fmtDateFull(dateISO)}</span>
           </div>
-          {draft.source === "schedule" && <div className="text-xs mt-1" style={{ color: "var(--ink2)" }}>Beosztásból generált fuvar — kézi módosítás után az újragenerálás felülírja.</div>}
-          {/* A withGeneratedRides a nap érintett edzéseinek MINDEN fuvarját lecseréli,
-              tehát az itt kézzel választott jármű is elveszik a következő generálásnál.
-              Csak akkor szólunk, ha van mentett beosztás a napra — különben nincs mi felülírja. */}
-          {hasSchedule && <div className="text-xs mt-1" style={{ color: "var(--warn)" }}>Erre a napra van mentett beosztás: a „Fuvarok generálása” ezt a fuvart felülírja. Ha a járművet rögzíteni akarod, a Beosztás fülön zárold a feladatot.</div>}
+          {draft.source === "schedule" && <div className="text-xs mt-1" style={{ color: "var(--ink2)" }}>Beosztásból generált fuvar — a következő optimalizálás vagy kézi áthelyezés felülírja.</div>}
+          {/* Az optimalizálás és a kézi áthelyezés újraépíti a nap fuvarjait (lásd
+              rideReplacedBy), tehát az itt kézzel választott jármű is elveszhet. Zárolni
+              a beosztásban lehet, a fuvaron nem. Csak akkor szólunk, ha van mentett
+              beosztás a napra — különben nincs mi felülírja. */}
+          {hasSchedule && <div className="text-xs mt-1" style={{ color: "var(--warn)" }}>Erre a napra van mentett beosztás: az optimalizálás ezt a fuvart felülírhatja. Ha a sofőrt és a járművet rögzíteni akarod, a Beosztás fülön helyezd át és zárold a feladatot.</div>}
         </div>
       </div>
 

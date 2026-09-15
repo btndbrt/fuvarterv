@@ -162,7 +162,7 @@ export function InfoDot({ text, align = "c", label = "Mi ez?" }) {
 export function HelpSheet({ onClose }) {
   const rows = [
     [CalendarDays, "Hét", "A hét összes edzése és fuvarja egy helyen. Koppints egy fuvarra a szerkesztéshez."],
-    [Workflow, "Beosztás", "A napi beosztás. Az Optimalizálás a legolcsóbb sofőr+jármű láncokat számolja ki; a láncok kézzel is átrendezhetők."],
+    [Workflow, "Beosztás", "A heti beosztás. Az Optimalizálás az egész hétre kiszámolja a legolcsóbb sofőr+jármű láncokat, és a fuvarokat is rögzíti; a láncok kézzel is átrendezhetők, a zárolt feladatokhoz nem nyúl."],
     [Boxes, "Adatok", "Itt tartod karban a csapatokat, állomásokat, helyszíneket, járműveket és sofőröket."],
     [Car, "Sofőr", "Napi, nyomtatható nézet egy-egy sofőr fuvarjairól."],
   ];

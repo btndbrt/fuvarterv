@@ -91,8 +91,8 @@ export function PrintSheets({ state, dateISO, onClose }) {
       <div className="print-page">
         {sheets.length === 0 ? (
           <EmptyState>
-            Erre a napra egyik sofőrnek sincs fuvarja. Előbb futtasd az optimalizálást,
-            majd a <b>Fuvarok generálása a beosztásból</b> gombot.
+            Erre a napra egyik sofőrnek sincs fuvarja. Futtasd a Beosztás fülön a
+            <b> Heti beosztás optimalizálása</b> gombot, és alkalmazd a javaslatot.
           </EmptyState>
         ) : (
           sheets.map(({ driver, entries }) => (

@@ -320,12 +320,27 @@ nonsense in practice: those children are standing in one place.
 
 **Context.** Chains and rides described the same reality twice, and could disagree.
 
-**Decision.** Generating from the schedule replaces **every** ride of the day's affected
+**Decision.** Generating from the schedule replaces the rides of the day's affected
 trainings. The schedule becomes the single source for that day.
 
 **Consequence.** The week and driver views show the optimised plan. A manual edit to a
-generated ride is overwritten by the next regeneration, which is why the button asks for
-confirmation and says so.
+generated ride is overwritten by the next regeneration.
+
+**Revised: optimising publishes, and the lock is the protection.** There used to be a
+daily and a weekly optimise button, plus a separate, confirmed "Fuvarok generálása"
+step; applying the week deliberately left rides alone. That was three buttons for one
+job, and a plan that did not reach the drivers until someone remembered the third. Now
+the weekly optimiser is the only one, and applying it writes the schedule *and* the
+rides of all seven days. A manual move on the Schedule tab rebuilds that day's rides
+at once.
+
+What protects manual work is the lock, not a confirmation. A locked task or chain
+keeps its driver, vehicle and chain through every run, so the ride built from it comes
+out the same. Anything unlocked may be replaced, hand-made rides included, and the
+proposal counts them before applying. One exception (`rideReplacedBy`): a hand-made
+ride for a leg — training plus direction — that no chain covers is kept, because the
+optimiser had nothing to put in its place and deleting it would leave the team with no
+ride at all.
 
 **A ride names its run** (`ride.runId`, the chain's id). Without it the two descriptions
 disagreed again in the one place it mattered: a chain is a single continuous occupancy,
