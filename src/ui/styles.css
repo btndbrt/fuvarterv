@@ -262,37 +262,45 @@ button.banner:focus-visible{outline:3px solid var(--acc-soft);outline-offset:2px
 :focus-visible{outline:2px solid var(--acc);outline-offset:2px;}
 @media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important;}}
 
-/* ---------- Printed day sheets ----------
-   On screen this is an ordinary scrolling panel. In print the app shell disappears,
-   the panel stops being a panel, and each driver's section claims its own page.
+/* ---------- Printed week sheet ----------
+   One driver's week as a table. On screen this is an ordinary scrolling panel. In
+   print the app shell disappears, the panel stops being a panel, and the table runs
+   across as many landscape pages as the week needs.
 
    Nothing below depends on background graphics surviving. Browsers let the reader
-   switch those off, and a dark card header printed without its background is white
-   text on white paper — so for print the headers are turned back into ink on white
-   rather than trusted to keep their fill. */
+   switch those off, so the table is drawn with borders and ink, never with fills
+   that would carry meaning. */
 .print-overlay{position:fixed;inset:0;z-index:60;background:var(--paper);overflow:auto;}
 .print-bar{position:sticky;top:0;z-index:1;display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:10px 16px;background:var(--card);border-bottom:1px solid var(--line);}
-.print-page{max-width:760px;margin:0 auto;padding:20px 16px 60px;}
-.print-sheet{margin-bottom:34px;}
+.print-page{max-width:1040px;margin:0 auto;padding:20px 16px 60px;}
 .print-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding-bottom:10px;border-bottom:2px solid var(--ink);margin-bottom:10px;}
 .print-summary{display:flex;gap:14px;flex-wrap:wrap;font-size:13px;color:var(--ink2);margin-bottom:14px;}
+/* The table keeps a readable width on a phone and scrolls inside its own box. */
+.print-scroll{overflow-x:auto;}
+.print-table{width:100%;min-width:680px;border-collapse:collapse;font-size:13px;background:var(--card);color:var(--ink);}
+.print-table th,.print-table td{border:1px solid var(--line2);padding:6px 8px;text-align:left;vertical-align:top;line-height:1.4;}
+.print-table th{font-size:12px;font-weight:800;color:var(--ink2);}
+.print-table .num{text-align:right;}
+.print-table td.day{font-weight:800;white-space:nowrap;width:1%;}
+.print-table td.day .sub{font-weight:600;font-size:12px;color:var(--ink2);}
+.print-table td.time{font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap;width:1%;}
+.print-table td .dir{display:inline-block;margin-left:6px;font-size:11px;font-weight:800;letter-spacing:.02em;border:1.5px solid currentColor;border-radius:5px;padding:0 5px;}
+/* A depot run is a trip the driver makes, but nobody is waiting at the end of it. */
+.print-table tr.depot td:not(.day){color:var(--ink2);font-style:italic;}
+.print-table td.empty{color:var(--ink3);}
+/* A day's rows start with a heavier rule, so the eye finds Tuesday without counting. */
+.print-table tbody{border-top:2px solid var(--ink);}
 
 @media print{
-  @page{size:A4 portrait;margin:12mm;}
+  @page{size:A4 landscape;margin:10mm;}
   .ft-root>header,.ft-root>main,.ft-root>nav,.noprint{display:none!important;}
   .print-overlay{position:static!important;overflow:visible!important;background:#fff!important;}
   .print-page{max-width:none;margin:0;padding:0;}
-  .print-sheet{margin:0;break-after:page;page-break-after:always;}
-  .print-sheet:last-child{break-after:auto;page-break-after:auto;}
-  .card{break-inside:avoid;page-break-inside:avoid;box-shadow:none!important;border:1px solid #999!important;}
-  .rail-row{break-inside:avoid;page-break-inside:avoid;}
-  .print-sheet .cardhead{background:#fff!important;color:#000!important;border-bottom:2px solid #000;}
-  .print-sheet .cardhead .disp,.print-sheet .cardhead .text-sm,.print-sheet .cardhead .text-xs{color:#000!important;opacity:1!important;}
-  .print-sheet .dirpill{background:#fff!important;color:#000!important;border-color:#000!important;}
-  /* A colour-coded dot is meaningless once the fill is dropped, so ring it too. */
-  .tdot{outline:1px solid #000;outline-offset:1px;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
-  .plate{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
-  /* Phone-sized type is oversized on A4, but stays big enough to read at arm's length. */
-  .print-sheet .rail-row .tnum{font-size:20px!important;}
-  .print-sheet .rail-row .font-semibold{font-size:15px!important;}
+  .print-scroll{overflow:visible!important;}
+  .print-table{min-width:0;font-size:10.5pt;background:#fff!important;color:#000!important;}
+  .print-table th,.print-table td{border-color:#777!important;color:#000!important;}
+  .print-table tbody{border-top-color:#000!important;break-inside:avoid;page-break-inside:avoid;}
+  .print-table tr.depot td:not(.day),.print-table td.day .sub,.print-table td.empty{color:#444!important;}
+  /* The header row repeats on every page, so page two is not a table of bare numbers. */
+  .print-table thead{display:table-header-group;}
 }

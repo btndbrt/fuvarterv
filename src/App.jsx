@@ -45,11 +45,11 @@ export default function App() {
   const [emptyWs, setEmptyWs] = useState(false);
   const [retryTick, setRetryTick] = useState(0);
   const [helpOpen, setHelpOpen] = useState(false);
-  /* The date whose driver sheets are open for printing, or null. Held here rather
-     than in the schedule screen because the overlay has to be a direct child of
-     .ft-root: the print stylesheet hides the header, the tabs and <main>, and the
-     sheets have to survive that. */
-  const [printDate, setPrintDate] = useState(null);
+  /* The Monday (ISO) of the week whose driver sheet is open for printing, or null.
+     Held here rather than in the schedule screen because the overlay has to be a
+     direct child of .ft-root: the print stylesheet hides the header, the tabs and
+     <main>, and the sheet has to survive that. */
+  const [printWeek, setPrintWeek] = useState(null);
   const loaded = useRef(false);
   /* The last blob written out, or read back unchanged from the server. Saving
      compares against THIS, not against object identity: otherwise every page load
@@ -120,7 +120,7 @@ export default function App() {
   /* Flush a pending save when the page closes, is hidden, or unmounts. That last
      one is signing out: <App/> unmounts before the debounce would fire. */
   useEffect(() => {
-    const onPrint = (e) => setPrintDate(e.detail?.dateISO || null);
+    const onPrint = (e) => setPrintWeek(e.detail?.weekMonISO || null);
     window.addEventListener("fuvarterv:print", onPrint);
     return () => window.removeEventListener("fuvarterv:print", onPrint);
   }, []);
@@ -215,7 +215,7 @@ export default function App() {
           );
         })}
       </nav>
-      {printDate && <PrintSheets state={state} dateISO={printDate} onClose={() => setPrintDate(null)} />}
+      {printWeek && <PrintSheets state={state} weekMonISO={printWeek} onClose={() => setPrintWeek(null)} />}
       {helpOpen && <HelpSheet onClose={() => setHelpOpen(false)} />}
     </div>
   );
