@@ -84,6 +84,25 @@ export function Modal({ title, onClose, children }) {
   );
 }
 
+/* A full-screen "please wait" layer for work that blocks the page.
+
+   The optimizer runs synchronously, so while it works the browser can neither
+   respond to input nor update anything drawn by script. The spinner is therefore
+   a pure CSS transform animation, which the browser keeps turning on its own
+   compositor thread even while JavaScript is busy. The caller must yield a frame
+   before starting the work, or this never gets painted at all. */
+export function BusyOverlay({ title, hint }) {
+  return (
+    <div className="busy-bg" role="alertdialog" aria-modal="true" aria-busy="true" aria-live="assertive" aria-label={title}>
+      <div className="busy-card">
+        <span className="busy-spin" aria-hidden />
+        <div className="disp text-lg">{title}</div>
+        {hint && <div className="text-sm" style={{ color: "var(--ink2)" }}>{hint}</div>}
+      </div>
+    </div>
+  );
+}
+
 /* Two-step delete: the first tap arms it, and it disarms itself after 3 seconds. */
 export function DangerBtn({ label = "Törlés", confirmLabel = "Biztos törlöd?", onConfirm, small, disabledReason, onBlocked }) {
   const [armed, setArmed] = useState(false);
