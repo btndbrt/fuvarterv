@@ -904,6 +904,9 @@ export function ridesFromChains(state, weekday, chains) {
       out.push({
         id: uid(),
         runId,
+        /* The task it was generated from, so the ride editor can tell which lock
+           protects it even when the leg is split across several buses. */
+        taskId: t.id,
         trainingId: t.trainingId,
         day: tr.type === "weekly" ? weekday : null,
         date: tr.type === "once" ? tr.date : null,
@@ -936,32 +939,70 @@ export function rideBelongsToDay(state, ride, weekday, affectedTrainingIds) {
   return tr.type === "weekly" ? ride.day === weekday : true;
 }
 
-/* The legs — training plus direction — that a set of chains will produce rides for. */
-const coveredLegs = (chains) =>
-  new Set((chains || []).flatMap((c) => (c.tasks || []).map((t) => `${t.trainingId}|${t.dir}`)));
+/* The day's chains, indexed for rebuilding rides: the legs — training plus
+   direction — they cover, and the chain holding each LOCKED task (locked by its own
+   switch or by its chain's). */
+function chainIndex(chains) {
+  const covered = new Set(), lockedIn = new Map();
+  for (const c of chains || [])
+    for (const t of c.tasks || []) {
+      covered.add(`${t.trainingId}|${t.dir}`);
+      if (t.locked || c.locked) lockedIn.set(t.id, c);
+    }
+  return { covered, lockedIn };
+}
+
+/* The chain a saved ride is pinned to, or null.
+
+   A ride is pinned when it was saved by hand with the lock on (saveLockedRide): it
+   names its task, and that task is still locked in the schedule. A pinned ride is
+   kept exactly as entered, stops and times included — a lock the optimizer honoured
+   for the crew but not for the ride would still overwrite what the user locked.
+   Generated rides are never pinned: they are rebuilt from their chain, which is what
+   keeps them current after a change to the stops or the settings. */
+function pinnedChain(state, ride, weekday, affected, idx) {
+  if (ride.source === "schedule" || !ride.taskId) return null;
+  if (!rideBelongsToDay(state, ride, weekday, affected)) return null;
+  return idx.lockedIn.get(ride.taskId) || null;
+}
 
 /* True when generating from the day's chains replaces this saved ride.
 
-   Locks live on the schedule, not on rides. A locked task or chain keeps its driver,
-   vehicle and chain through every optimisation, so the ride generated for it comes
-   out the same, and that is what protects manual work. Anything unlocked may be
-   replaced, hand-made rides included — with one exception: a hand-made ride for a
-   leg no chain covers is kept. The optimizer had nothing to put in its place, and
-   deleting it would leave the team with no ride at all. A GENERATED ride for such a
-   leg still goes, because it names a run that no longer holds it. */
-export function rideReplacedBy(state, ride, weekday, affected, covered) {
+   Locks live on the schedule. A locked task or chain keeps its driver, vehicle and
+   chain through every optimisation, so the ride generated for it comes out the same,
+   and a pinned ride is kept as it is. Anything unlocked may be replaced, hand-made
+   rides included — with one exception: a hand-made ride for a leg no chain covers is
+   kept. The optimizer had nothing to put in its place, and deleting it would leave
+   the team with no ride at all. A GENERATED ride for such a leg still goes, because
+   it names a run that no longer holds it. */
+export function rideReplacedBy(state, ride, weekday, affected, idx) {
   if (!rideBelongsToDay(state, ride, weekday, affected)) return false;
-  return ride.source === "schedule" || covered.has(`${ride.trainingId}|${ride.dir || "oda"}`);
+  if (pinnedChain(state, ride, weekday, affected, idx)) return false;
+  return ride.source === "schedule" || idx.covered.has(`${ride.trainingId}|${ride.dir || "oda"}`);
 }
 
 /* Rebuild the day's rides from the schedule's chains: every ride rideReplacedBy
-   selects goes, and one ride per chained task comes in. */
+   selects goes, and one ride per chained task comes in — except for tasks a pinned
+   ride already stands for. */
 export function withGeneratedRides(state, weekday, weekMon, chains) {
   const { tasks } = genDayTasks(state, weekday, weekMon);
   const affected = new Set(tasks.map((t) => t.trainingId));
-  const covered = coveredLegs(chains);
-  const kept = state.rides.filter((r) => !rideReplacedBy(state, r, weekday, affected, covered));
-  return [...kept, ...ridesFromChains(state, weekday, chains)];
+  const idx = chainIndex(chains);
+  const kept = [], pinnedTasks = new Set();
+  for (const r of state.rides) {
+    const ch = pinnedChain(state, r, weekday, affected, idx);
+    if (ch) {
+      /* One ride per locked task. A second one pinned to the same task goes, or the
+         bus would be booked twice. */
+      if (pinnedTasks.has(r.taskId)) continue;
+      pinnedTasks.add(r.taskId);
+      /* Crew and run follow the chain, so a locked task moved on the Schedule tab
+         takes its ride along instead of leaving it with the old driver. */
+      kept.push({ ...r, driverId: ch.driverId || r.driverId, vehicleId: ch.vehicleId || r.vehicleId, runId: ch.id || r.runId });
+    } else if (!rideReplacedBy(state, r, weekday, affected, idx)) kept.push(r);
+  }
+  const fresh = ridesFromChains(state, weekday, chains).filter((r) => !pinnedTasks.has(r.taskId));
+  return [...kept, ...fresh];
 }
 
 /* How many hand-made rides applying a week proposal would replace, so the proposal
@@ -971,10 +1012,85 @@ export function handRidesReplaced(state, weekMon, days) {
   days.forEach((r, d) => {
     if (r.empty) return;
     const affected = new Set(genDayTasks(state, d, weekMon).tasks.map((t) => t.trainingId));
-    const covered = coveredLegs(r.chains);
-    n += state.rides.filter((x) => x.source !== "schedule" && rideReplacedBy(state, x, d, affected, covered)).length;
+    const idx = chainIndex(r.chains);
+    n += state.rides.filter((x) => x.source !== "schedule" && rideReplacedBy(state, x, d, affected, idx)).length;
   });
   return n;
+}
+
+/* ---------- Locking a ride from the ride editor ----------
+   A ride has no lock of its own. It stands for one schedule task, and the lock is put
+   on that task, where the optimizer already honours it. One lock, one place: the
+   Schedule tab shows it, and releasing it there releases the ride too. */
+
+/* The schedule task a ride stands for: its own `taskId` while that task still
+   exists, otherwise its leg's only task. A hand-made ride on a leg split across
+   several buses has no single answer, so null — as it is when the leg produced no
+   task at all (no stops, no headcount). */
+export function taskForRide(state, ride, weekday, weekMon) {
+  const leg = genDayTasks(state, weekday, weekMon).tasks
+    .filter((t) => t.trainingId === ride.trainingId && t.dir === (ride.dir || "oda"));
+  return leg.find((t) => t.id === ride.taskId) || (leg.length === 1 ? leg[0] : null);
+}
+
+/* Where a task sits in the day's saved schedule, and whether it is locked there. */
+export function taskLock(state, weekday, taskId) {
+  for (const ch of state.assignments?.[weekday]?.chains || []) {
+    const x = ch.taskIds.find((y) => y.id === taskId);
+    if (x) return { chain: ch, locked: !!(x.locked || ch.locked), byChain: !!ch.locked, alone: ch.taskIds.length === 1 };
+  }
+  return null;
+}
+
+/* Whether the optimizer leaves this ride alone. A generated ride carries its task
+   from birth; a hand-made one only once it has been saved with the lock. */
+export function rideLocked(state, ride, weekday) {
+  return !!(ride.taskId && taskLock(state, weekday, ride.taskId)?.locked);
+}
+
+/* Save a ride with the lock on. The ride's task goes into a locked chain with the
+   ride's driver and vehicle — the chain it is already in when the crew matches,
+   otherwise a chain of its own — and the ride is saved pinned to it. The day's rides
+   are then rebuilt, so a generated ride the pinned one supersedes goes at once
+   instead of showing the driver view the same trip twice. */
+export function saveLockedRide(state, ride, weekday, weekMon, task) {
+  const cur = taskLock(state, weekday, task.id);
+  let chains = state.assignments?.[weekday]?.chains || [];
+  let chainId;
+  if (cur && cur.chain.id && cur.chain.driverId === ride.driverId && cur.chain.vehicleId === ride.vehicleId) {
+    chainId = cur.chain.id;
+    chains = chains.map((ch) => (ch.id !== chainId ? ch
+      : { ...ch, taskIds: ch.taskIds.map((x) => (x.id === task.id ? { ...x, locked: true } : x)) }));
+  } else {
+    chainId = uid();
+    chains = [
+      ...chains.map((ch) => ({ ...ch, taskIds: ch.taskIds.filter((x) => x.id !== task.id) })).filter((ch) => ch.taskIds.length),
+      { id: chainId, driverId: ride.driverId, vehicleId: ride.vehicleId, taskIds: [{ id: task.id, locked: true }] },
+    ];
+  }
+  const saved = { ...ride, taskId: task.id, source: "manual", runId: chainId };
+  const next = {
+    ...state,
+    assignments: { ...state.assignments, [weekday]: { chains } },
+    rides: [...state.rides.filter((r) => r.id !== ride.id), saved],
+  };
+  return { ...next, rides: withGeneratedRides(next, weekday, weekMon, resolveDay(next, weekday, weekMon).chains) };
+}
+
+/* Release the lock a ride was saved with: the task's own switch, and its chain's when
+   the task is alone in it. A chain locked with other work in it stays locked — the
+   ride editor does not offer this there. The ride itself is left as it is until the
+   next rebuild replaces it. */
+export function unlockRideTask(state, weekday, taskId) {
+  const chains = (state.assignments?.[weekday]?.chains || []).map((ch) => {
+    if (!ch.taskIds.some((x) => x.id === taskId)) return ch;
+    return {
+      ...ch,
+      locked: ch.taskIds.length === 1 ? false : !!ch.locked,
+      taskIds: ch.taskIds.map((x) => (x.id === taskId ? { ...x, locked: false } : x)),
+    };
+  });
+  return { ...state, assignments: { ...state.assignments, [weekday]: { chains } } };
 }
 
 /* The entry point for optimising one day.

@@ -1,12 +1,12 @@
 /* Fuvarterv — the ride editor: direction, vehicle, driver, stops. */
 
 import { useState, useMemo, useRef } from "react";
-import { ChevronLeft, ChevronRight, GripVertical, ArrowUp, ArrowDown, AlertTriangle, MapPin, Clock, X, Flag, Zap } from "lucide-react";
+import { ChevronLeft, ChevronRight, GripVertical, ArrowUp, ArrowDown, AlertTriangle, MapPin, Clock, X, Flag, Zap, Lock } from "lucide-react";
 import { DAYS, uid, byId } from "../domain/constants.js";
 import { mondayOf, addDays, timeToMin, minToTime, fmtDate, fmtDateFull, fmtWeekRange } from "../domain/datetime.js";
 import { weekOccurrences, findRides, findConflicts, rideWindow, seatSum, venueDepartMin, legFor, venueNeedsVignette } from "../domain/logic.js";
-import { planOda, planVissza, bestStationOrder } from "../domain/optimizer.js";
-import { Field, DangerBtn, EmptyState } from "../ui/base.jsx";
+import { planOda, planVissza, bestStationOrder, taskForRide, taskLock, rideLocked, saveLockedRide, unlockRideTask } from "../domain/optimizer.js";
+import { Field, Check, DangerBtn, EmptyState } from "../ui/base.jsx";
 import { OccCard } from "../ui/OccCard.jsx";
 
 /* ---------- Ride editor ---------- */
@@ -58,6 +58,7 @@ export function RideEditor({ state, update, training, dayIdx, dateISO, onBack })
             return (
               <button key={r.id} className={`chip ${i === idx ? "on" : ""}`} onClick={() => setSelIdx(i)}>
                 {i + 1}. fuvar · {(r.dir || "oda") === "vissza" ? "VISSZA" : "ODA"}{d ? ` · ${d.name}` : ""}
+                {rideLocked(state, r, dayIdx) && <Lock size={12} aria-label="zárolva" />}
               </button>
             );
           })}
@@ -93,6 +94,23 @@ export function RideForm({ state, update, training, dayIdx, dateISO, existing, o
   const vehicle = byId(state.vehicles, draft.vehicleId);
   const needsVignette = venueNeedsVignette(state, training.venueId);
   const hasSchedule = ((state.assignments?.[dayIdx]?.chains) || []).length > 0;
+
+  /* Locking. The lock goes on the schedule task this ride stands for, where the
+     optimizer honours it (see saveLockedRide). Worked out per direction, because a
+     new ride's direction can still change. */
+  const task = useMemo(
+    () => taskForRide(state, { trainingId: draft.trainingId, dir: draft.dir, taskId: draft.taskId }, dayIdx, mondayOf(dateISO)),
+    [state, draft.trainingId, draft.dir, draft.taskId, dayIdx, dateISO]);
+  const lock = task ? taskLock(state, dayIdx, task.id) : null;
+  /* Locked on arrival: a generated ride whose task is locked, or a hand-made one
+     saved with the lock. A hand-made ride whose task is locked for SOMEONE ELSE is
+     not — the next rebuild replaces it, and the box must not claim otherwise. */
+  const wasLocked = !!existing && !!lock?.locked && (existing.source === "schedule" || existing.taskId === task.id);
+  const [lockOn, setLockOn] = useState(wasLocked);
+  /* Held by a chain lock that covers other work too: releasing it here would unlock
+     rides this screen is not showing. */
+  const chainHeld = wasLocked && lock.byChain && !lock.alone;
+
   const conflicts = useMemo(() => findConflicts(state, draft), [state, draft]);
   const vConf = conflicts.filter((c) => c.type === "vehicle");
   const dConf = conflicts.filter((c) => c.type === "driver");
@@ -162,9 +180,12 @@ export function RideForm({ state, update, training, dayIdx, dateISO, existing, o
   const [dragOn, setDragOn] = useState(false);
 
   const save = () => {
-    update((s) => existing
-      ? { ...s, rides: s.rides.map((r) => r.id === existing.id ? { ...draft, id: existing.id } : r) }
-      : { ...s, rides: [...s.rides, { ...draft, id: uid() }] });
+    const ride = { ...draft, id: existing ? existing.id : uid() };
+    update((s) => {
+      if (lockOn && task) return saveLockedRide(s, ride, dayIdx, mondayOf(dateISO), task);
+      const next = { ...s, rides: existing ? s.rides.map((r) => (r.id === existing.id ? ride : r)) : [...s.rides, ride] };
+      return wasLocked ? unlockRideTask(next, dayIdx, task.id) : next;
+    });
     onBack();
   };
   const remove = () => {
@@ -197,12 +218,11 @@ export function RideForm({ state, update, training, dayIdx, dateISO, existing, o
           <div className="text-sm flex items-center gap-1" style={{ color: "var(--ink2)" }}>
             <MapPin size={14} /> {venue?.name} <span>· {fmtDateFull(dateISO)}</span>
           </div>
-          {draft.source === "schedule" && <div className="text-xs mt-1" style={{ color: "var(--ink2)" }}>Beosztásból generált fuvar — a következő optimalizálás vagy kézi áthelyezés felülírja.</div>}
+          {draft.source === "schedule" && !lockOn && <div className="text-xs mt-1" style={{ color: "var(--ink2)" }}>Beosztásból generált fuvar — a következő optimalizálás vagy kézi áthelyezés felülírja.</div>}
           {/* Az optimalizálás és a kézi áthelyezés újraépíti a nap fuvarjait (lásd
-              rideReplacedBy), tehát az itt kézzel választott jármű is elveszhet. Zárolni
-              a beosztásban lehet, a fuvaron nem. Csak akkor szólunk, ha van mentett
-              beosztás a napra — különben nincs mi felülírja. */}
-          {hasSchedule && <div className="text-xs mt-1" style={{ color: "var(--warn)" }}>Erre a napra van mentett beosztás: az optimalizálás ezt a fuvart felülírhatja. Ha a sofőrt és a járművet rögzíteni akarod, a Beosztás fülön helyezd át és zárold a feladatot.</div>}
+              rideReplacedBy), tehát a zárolatlan fuvar elveszhet. Csak akkor szólunk, ha
+              van mentett beosztás a napra — különben nincs mi felülírja. */}
+          {hasSchedule && !lockOn && <div className="text-xs mt-1" style={{ color: "var(--warn)" }}>Erre a napra van mentett beosztás: az optimalizálás ezt a fuvart felülírhatja, hacsak nem zárolod.</div>}
         </div>
       </div>
 
@@ -243,6 +263,14 @@ export function RideForm({ state, update, training, dayIdx, dateISO, existing, o
         <div key={i} className="banner banner-danger mb-3"><AlertTriangle size={18} />
           <span>A sofőrnek ekkor másik fuvarja van: <b>{confText(c)}</b></span></div>
       ))}
+
+      <Check label="Zárolás — az optimalizálás nem írja felül" checked={lockOn} onChange={setLockOn}
+        disabled={!task || chainHeld}
+        hint={!task
+          ? "Ez az út nem köthető egyetlen beosztási feladathoz (több buszra van bontva, vagy nem készül hozzá feladat), ezért itt nem zárolható. A Beosztás fülön a feladatokat egyenként zárolhatod."
+          : chainHeld
+            ? "Az egész lánc zárolva van — a feloldás a Beosztás fülön, a lánc fejlécében van."
+            : "A sofőr, a jármű és a megállók így maradnak: az optimalizálás ezt az utat nem adja másnak, és a fuvart sem cseréli le. A Beosztás fülön zárolt feladatként látszik."} />
 
       <div className="flex items-center justify-between mt-4 mb-2">
         <h3 className="disp text-base">Megállók sorrendben</h3>

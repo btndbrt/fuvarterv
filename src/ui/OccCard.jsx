@@ -1,10 +1,11 @@
 /* Fuvarterv — the card for one training occurrence. Shared by the week screen and
    the ride screen, so the two cannot drift apart visually. */
 
-import { AlertTriangle, MapPin, Clock, ChevronsRight } from "lucide-react";
+import { AlertTriangle, MapPin, Clock, ChevronsRight, Lock } from "lucide-react";
 import { byId } from "../domain/constants.js";
 import { minToTime } from "../domain/datetime.js";
 import { findRides, findConflicts, venueDepartMin } from "../domain/logic.js";
+import { rideLocked } from "../domain/optimizer.js";
 import { PlateChip } from "./base.jsx";
 import { timeToMin } from "../domain/datetime.js";
 import { seatSum } from "../domain/logic.js";
@@ -43,6 +44,7 @@ export function OccCard({ state, occ, onOpen }) {
               <span className={`dirpill ${dir === "vissza" ? "v" : ""}`}>{dir === "oda" ? "ODA" : "VISSZA"}</span>
               {vehicle && <PlateChip plate={vehicle.plate} />}
               <span className="text-sm font-medium truncate">{driver?.name || "?"}</span>
+              {rideLocked(state, ride, occ.dayIdx) && <Lock size={13} aria-label="zárolva" style={{ color: "var(--ink2)" }} />}
               {depTime && (
                 <span className="text-sm tnum flex items-center gap-1" style={{ color: "var(--ink2)" }}>
                   <Clock size={14} /> {dir === "vissza" ? "indulás a helyszínről" : "indulás"} {depTime}
