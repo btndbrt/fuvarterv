@@ -928,7 +928,7 @@ export function ridesFromChains(state, weekday, chains) {
 }
 
 /* True when this ride belongs to the tasks affected on this weekday. These are the
-   rides that generating from the schedule replaces. */
+   rides that generating from the schedule may replace. */
 export function rideBelongsToDay(state, ride, weekday, affectedTrainingIds) {
   if (!affectedTrainingIds.has(ride.trainingId)) return false;
   const tr = byId(state.trainings, ride.trainingId);
@@ -936,14 +936,45 @@ export function rideBelongsToDay(state, ride, weekday, affectedTrainingIds) {
   return tr.type === "weekly" ? ride.day === weekday : true;
 }
 
-/* Replace every ride of the day's affected trainings with ones generated from the
-   schedule's chains. The user opts into this: the schedule then owns the day's whole
-   set of rides. */
+/* The legs — training plus direction — that a set of chains will produce rides for. */
+const coveredLegs = (chains) =>
+  new Set((chains || []).flatMap((c) => (c.tasks || []).map((t) => `${t.trainingId}|${t.dir}`)));
+
+/* True when generating from the day's chains replaces this saved ride.
+
+   Locks live on the schedule, not on rides. A locked task or chain keeps its driver,
+   vehicle and chain through every optimisation, so the ride generated for it comes
+   out the same, and that is what protects manual work. Anything unlocked may be
+   replaced, hand-made rides included — with one exception: a hand-made ride for a
+   leg no chain covers is kept. The optimizer had nothing to put in its place, and
+   deleting it would leave the team with no ride at all. A GENERATED ride for such a
+   leg still goes, because it names a run that no longer holds it. */
+export function rideReplacedBy(state, ride, weekday, affected, covered) {
+  if (!rideBelongsToDay(state, ride, weekday, affected)) return false;
+  return ride.source === "schedule" || covered.has(`${ride.trainingId}|${ride.dir || "oda"}`);
+}
+
+/* Rebuild the day's rides from the schedule's chains: every ride rideReplacedBy
+   selects goes, and one ride per chained task comes in. */
 export function withGeneratedRides(state, weekday, weekMon, chains) {
   const { tasks } = genDayTasks(state, weekday, weekMon);
   const affected = new Set(tasks.map((t) => t.trainingId));
-  const kept = state.rides.filter((r) => !rideBelongsToDay(state, r, weekday, affected));
+  const covered = coveredLegs(chains);
+  const kept = state.rides.filter((r) => !rideReplacedBy(state, r, weekday, affected, covered));
   return [...kept, ...ridesFromChains(state, weekday, chains)];
+}
+
+/* How many hand-made rides applying a week proposal would replace, so the proposal
+   can say so before anything is lost. `days` is optimizeWeek's per-day result. */
+export function handRidesReplaced(state, weekMon, days) {
+  let n = 0;
+  days.forEach((r, d) => {
+    if (r.empty) return;
+    const affected = new Set(genDayTasks(state, d, weekMon).tasks.map((t) => t.trainingId));
+    const covered = coveredLegs(r.chains);
+    n += state.rides.filter((x) => x.source !== "schedule" && rideReplacedBy(state, x, d, affected, covered)).length;
+  });
+  return n;
 }
 
 /* The entry point for optimising one day.

@@ -899,18 +899,23 @@ They are linked by **materialization**:
   detection). Used to display the schedule.
 - `ridesFromChains(state, weekday, chains)` turns chains into `rides` — one ride per
   task, with `dir`, the timetable copied into `stops`, and `source: "schedule"`.
-- `withGeneratedRides(state, weekday, weekMon, chains)` replaces all rides of the
-  affected trainings for that day with freshly generated ones, and keeps the rest.
+- `withGeneratedRides(state, weekday, weekMon, chains)` rebuilds that day's rides:
+  every ride `rideReplacedBy` selects goes, one ride per chained task comes in, and
+  the rest is kept.
+- `rideReplacedBy` selects, among the rides of the day's affected trainings, every
+  generated ride (`source: "schedule"`) and every hand-made ride whose leg (training +
+  direction) a chain covers. A hand-made ride for an uncovered leg is kept.
 
 Two UI actions trigger this (both in the Schedule screen):
-- **Apply an optimizer proposal** (`applyProposal`) — saves the new `assignments`
-  *and* regenerates rides.
-- **"Fuvarok generálása a beosztásból"** (`doGenerate`) — regenerates rides from the
-  current saved schedule, e.g. after manual tweaks.
+- **Apply the week proposal** (`applyWeekProposal`) — saves the new `assignments` of
+  all seven days *and* rebuilds their rides. The proposal shows how many hand-made
+  rides this replaces (`handRidesReplaced`).
+- **A manual move** (`moveToChain`, `moveToNew`, `moveToUnassigned`) — rebuilds the
+  current day's rides from the edited schedule.
 
-> **Gotcha:** generation *replaces* every ride of the affected trainings. Manual
-> edits to a generated ride are overwritten the next time you generate. The schedule
-> is the single source of truth for generated rides.
+> **Gotcha:** manual edits to a ride are overwritten the next time its day is rebuilt.
+> Locks live on the schedule, not on rides: to keep a driver and vehicle, lock the
+> task or chain (a manual move locks it automatically). See ADR-17.
 
 ---
 
