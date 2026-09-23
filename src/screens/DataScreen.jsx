@@ -4,7 +4,6 @@
    screen. */
 
 import { useState } from "react";
-import { DangerBtn } from "../ui/base.jsx";
 import { TeamsScreen } from "./TeamsScreen.jsx";
 import { MasterScreen } from "./MasterScreen.jsx";
 import { UsersPanel } from "./UsersPanel.jsx";
@@ -20,7 +19,7 @@ export const DATA_CATS = [
   { key: "users", label: "Felhasználók" },
 ];
 
-export function DataScreen({ state, update, resetSeed, notice, setNotice, myEmail }) {
+export function DataScreen({ state, update, notice, setNotice, myEmail }) {
   const [sub, setSub] = useState("teams");
   return (
     <div className="pb-4">
@@ -36,15 +35,6 @@ export function DataScreen({ state, update, resetSeed, notice, setNotice, myEmai
         <MasterScreen tab={sub} state={state} update={update} notice={notice} setNotice={setNotice} />
       )}
 
-      {/* Egyszer, az Adatok fül alján — korábban mind a négy törzsadat-alfülön
-          ott volt, vagyis a teljes valós adat felülírása négy helyen, két
-          kattintásra volt elérhető. A Felhasználók alfülön nincs értelme: a
-          szerepkörök nem részei a munkaterület-adatnak. */}
-      {sub !== "users" && (
-        <div className="mt-8 mb-2 flex justify-center">
-          <DangerBtn label="Mintaadatok visszaállítása" confirmLabel="Minden adat felülíródik!" onConfirm={resetSeed} />
-        </div>
-      )}
     </div>
   );
 }

@@ -1,9 +1,17 @@
-/* Fuvarterv — sample data, and shape normalisation for a loaded state.
+/* Fuvarterv — shape normalisation for a loaded state, plus the test fixture.
 
-   The sample data is FICTIONAL. Names, plates and headcounts are placeholders; the
-   stations and venues are real public places, kept because they make the distances
-   and therefore the optimiser's output realistic. Replace the whole thing with your
-   own club's data, or delete the rows from inside the app. */
+   `ensureShape` is production code and runs on every load. `seedState` is NOT: no
+   screen and no code path in the app reaches it any more, and a fresh workspace now
+   starts genuinely empty. It is kept because four test suites use it as their one
+   realistic, populated state — the smoke test walks every tab against it, and the
+   optimiser's property tests need a club with real distances between real places to
+   mean anything. Vite tree-shakes it out of the bundle precisely because nothing in
+   the app imports it.
+
+   The data is FICTIONAL. Names, plates and headcounts are placeholders; the stations
+   and venues are real public places, kept because they make the distances and
+   therefore the optimiser's output realistic. If you reach for this as a starting
+   point for a real club, copy it out — do not wire it back into the app. */
 
 import { DEFAULT_SETTINGS } from "./storage.js";
 

@@ -40,16 +40,16 @@ export const DEFAULT_SETTINGS = {
 };
 
 /* True when the error means "nothing has been saved yet" (an empty workspace).
-   ONLY then may sample data be seeded. Every other error is real (network,
-   permissions), and seeding over real data we merely failed to read would destroy
-   it. */
+   ONLY then may an empty workspace be created and written. Every other error is real
+   (network, permissions), and writing over real data we merely failed to read would
+   destroy it. */
 export function isNotFound(err) {
   return !!(err && err.code === "NOT_FOUND");
 }
 
-/* Loads the saved state. No data throws NOT_FOUND, and the caller seeds from
-   there. Every other error is re-thrown so the caller can show a retry screen
-   instead of sample data. */
+/* Loads the saved state. No data throws NOT_FOUND, and the caller starts an empty
+   workspace from there. Every other error is re-thrown so the caller can show a retry
+   screen instead of an empty state that a later save would make permanent. */
 export async function loadState() {
   const r = await window.storage.get(STORAGE_KEY);
   return r && r.value ? JSON.parse(r.value) : null;

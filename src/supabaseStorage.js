@@ -177,11 +177,11 @@ export const supabaseStorage = {
 
     if (error) throw error;
     if (!data) {
-      // No row yet → a *typed* not-found error. Only this specific case should
-      // make the app seed sample data; any other failure (network, permissions)
-      // keeps its own error so the caller can tell them apart and never seeds
-      // over real data it simply failed to read. Postgres/PostgREST error codes
-      // never collide with this sentinel.
+      // No row yet → a *typed* not-found error. Only this specific case may make
+      // the app start an empty workspace and write it; any other failure (network,
+      // permissions) keeps its own error so the caller can tell them apart and never
+      // writes over real data it simply failed to read. Postgres/PostgREST error
+      // codes never collide with this sentinel.
       throw Object.assign(new Error("key not found"), { code: "NOT_FOUND" });
     }
 

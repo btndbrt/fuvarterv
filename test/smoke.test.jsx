@@ -57,11 +57,13 @@ async function mount() {
 }
 
 describe("App renders end to end", () => {
-  test("seeds and renders the week view when the workspace is empty", async () => {
+  test("renders an EMPTY workspace without throwing", async () => {
     window.storage = fakeStorage(null);
     await mount();
     expect(container.textContent).toContain("Fuvarterv");
-    // Seed data has teams with trainings, so the week view lists occurrences.
+    /* A fresh workspace no longer gets sample data, so every screen has to survive
+       having nothing at all to show — the case that used to be impossible to reach
+       through the app, and is now the FIRST thing a new club sees. */
     expect(container.querySelector("nav.tabbar")).toBeTruthy();
   });
 
