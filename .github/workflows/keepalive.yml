@@ -1,0 +1,72 @@
+# Keeps the Supabase project from being paused for inactivity.
+#
+# A free-tier project is paused after about a week without requests, and restoring
+# one is a manual click in the dashboard — so the club would arrive on Monday to a
+# dead app. One request a day is far more often than needed, which is deliberate:
+# GitHub's scheduled runs are best-effort and can be delayed by hours under load, so
+# the daily cadence is margin against a missed run, not the actual requirement.
+#
+# WHAT IT PINGS. A plain REST select against app_state. Every RLS policy in
+# 0001_initial_schema.sql is `to authenticated` and nothing grants `anon` a policy,
+# so this reads as anon, passes the table grant, and RLS filters every row out: the
+# reply is an empty array with HTTP 200. That is all a keepalive needs — the query
+# reached PostgREST and Postgres. It deliberately adds NO new anon capability, which
+# an `anon`-executable ping() function would have done.
+#
+# WHY NOT VERCEL CRON. The app is a static SPA; vercel.json has no functions at all.
+# A Vercel cron would mean introducing a serverless function purely to hold this.
+
+name: Keepalive
+
+on:
+  schedule:
+    # Not on the hour: GitHub warns that the top of the hour is its busiest moment
+    # and those runs are the ones most likely to be dropped or delayed.
+    - cron: "17 6 * * *"
+  # So the ping can be fired by hand to check the project is actually reachable,
+  # without waiting a day to find out.
+  workflow_dispatch:
+
+# The job talks only to Supabase. It never needs the repository, so it is handed no
+# access to it.
+permissions: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    # No checkout: nothing here reads the repository.
+    steps:
+      - name: Ping Supabase
+        env:
+          URL: ${{ secrets.SUPABASE_URL }}
+          KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${URL:-}" ] || [ -z "${KEY:-}" ]; then
+            echo "::error::Set the SUPABASE_URL and SUPABASE_ANON_KEY repository secrets."
+            exit 1
+          fi
+
+          # Three attempts before giving up. A single transient 5xx would otherwise
+          # send a failure email for something that fixed itself, and an alert that
+          # cries wolf is one nobody reads by the time it matters.
+          for attempt in 1 2 3; do
+            code=$(curl -sS -m 30 -o /dev/null -w '%{http_code}' \
+              -H "apikey: $KEY" \
+              -H "Authorization: Bearer $KEY" \
+              "$URL/rest/v1/app_state?select=id&limit=1") || code="000"
+
+            echo "attempt $attempt: HTTP $code"
+            if [ "$code" = "200" ]; then
+              echo "Project is awake."
+              exit 0
+            fi
+            if [ "$attempt" -lt 3 ]; then sleep 20; fi
+          done
+
+          # Loud on purpose. A keepalive that fails quietly is indistinguishable
+          # from one that is working, and the whole point is to find out BEFORE
+          # somebody needs the schedule.
+          echo "::error::Supabase did not answer with 200 (last: $code). 401 means the anon key is wrong; 000 or 5xx can mean the project is already paused."
+          exit 1
