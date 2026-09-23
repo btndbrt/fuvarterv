@@ -4,7 +4,8 @@
 #
 # Does everything needed, without root:
 #   1. Installs Node.js 22 LTS into ~/.local (only if node >= 20 is missing —
-#      the same floor as "engines" in package.json, which Vercel also reads).
+#      the same floor as "engines" in package.json; the deployed build pins its
+#      own version through NODE_VERSION in netlify.toml).
 #   2. npm install + starts the Vite dev server for the committed root project.
 #
 # The app source lives entirely under src/. Persistence and login are handled by

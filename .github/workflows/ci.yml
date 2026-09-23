@@ -22,7 +22,7 @@ jobs:
           cache: npm
 
       # `npm ci` installs strictly from package-lock.json and, unlike `npm install`,
-      # refuses to paper over a peer-dependency conflict. Vercel installs the same
+      # refuses to paper over a peer-dependency conflict. Netlify installs the same
       # way, so this step is what stops a broken lockfile reaching a deployment.
       - name: Install
         run: npm ci

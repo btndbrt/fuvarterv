@@ -1,0 +1,54 @@
+# Netlify deployment config — the whole hosting setup, and the successor to the
+# vercel.json this replaced (ADR-09).
+#
+# Two things have to be here or the deployment is quietly wrong:
+#
+#   1. The SPA fallback. Netlify returns its own 404 for a path with no file behind
+#      it, so without the redirect below every deep link and every browser refresh
+#      on, say, /#/beosztas-style navigation breaks for the user and nobody notices
+#      until they bookmark something.
+#
+#   2. The security headers. These are NOT defaults. A host swap silently drops
+#      every one of them, including the CSP that ADR-21 exists to enforce, and the
+#      app keeps working perfectly while unprotected — the worst kind of regression,
+#      because nothing fails.
+
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  # Netlify does not reliably read "engines" from package.json the way Vercel did,
+  # so the version is pinned here instead. 22 is one of the two versions ci.yml
+  # tests; if that matrix changes, change this with it.
+  NODE_VERSION = "22"
+
+# Single-page-app fallback: serve index.html for anything that is not a real file.
+# Deliberately NOT force = true — without it Netlify checks for a matching static
+# file first, so the hashed assets in dist/ are still served as themselves and only
+# genuine app routes fall through to the shell.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+[[headers]]
+  for = "/*"
+
+  [headers.values]
+    # Kept on ONE line on purpose. TOML's multi-line continuation would be easier to
+    # read, but a misplaced backslash silently changes a directive, and a CSP that is
+    # subtly wrong either blocks the map tiles or quietly permits what it meant to
+    # forbid. This file is now the ONLY place the policy lives: add an external call
+    # to the app and it has to be added here too, or the call fails in production
+    # while working perfectly in dev.
+    #
+    # No 'unsafe-inline' anywhere (ADR-21). cdnjs carries the Leaflet CSS/JS, Google
+    # Fonts the typeface, tile.openstreetmap.org the map, OSRM the travel-time matrix
+    # and nominatim the address search; *.supabase.co needs wss:// as well as https://
+    # for the realtime socket.
+    Content-Security-Policy = "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' https://cdnjs.cloudflare.com; style-src 'self' https://cdnjs.cloudflare.com https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://tile.openstreetmap.org https://cdnjs.cloudflare.com; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://router.project-osrm.org https://nominatim.openstreetmap.org; upgrade-insecure-requests"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    X-Frame-Options = "DENY"
+    Permissions-Policy = "geolocation=(), camera=(), microphone=(), payment=(), usb=()"

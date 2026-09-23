@@ -52,7 +52,7 @@ export function loginErrorMessage(error) {
     return "Túl sok próbálkozás egymás után. Várj egy percet, és próbáld újra.";
 
   if (status === 401 || raw.includes("invalid api key"))
-    return "A szerver beállítása hibás (érvénytelen API kulcs) — ez nem rajtad múlik. A Vercelen a VITE_SUPABASE_ANON_KEY értékét kell javítani, majd újradeployolni.";
+    return "A szerver beállítása hibás (érvénytelen API kulcs) — ez nem rajtad múlik. A Netlify-on a VITE_SUPABASE_ANON_KEY értékét kell javítani, majd újradeployolni.";
 
   // Network or CSP: the request never reached the server at all.
   if (error?.name === "AuthRetryableFetchError" || raw.includes("failed to fetch") || raw.includes("networkerror"))

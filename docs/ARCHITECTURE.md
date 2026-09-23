@@ -66,7 +66,7 @@ Three consequences shape the entire architecture.
 
 ```mermaid
 flowchart LR
-    U["Club manager / driver<br/>(browser)"] --> V["Vercel<br/>static SPA"]
+    U["Club manager / driver<br/>(browser)"] --> V["Netlify<br/>static SPA"]
     V --> S["Supabase<br/>auth + Postgres + RLS"]
     V -. "matrix, on demand" .-> O["OSRM<br/>router.project-osrm.org"]
     V -. "address search" .-> N["Nominatim"]
@@ -267,7 +267,7 @@ anon key ships in the JS bundle by design, and every policy grants access to any
 bundle can register and read everything. The schema file says so in its header, and so
 does the README.
 
-`vercel.json` adds a Content-Security-Policy with **no `'unsafe-inline'`**, listing
+`netlify.toml` adds a Content-Security-Policy with **no `'unsafe-inline'`**, listing
 exactly the origins the app uses.
 
 ## 8. Domain model and invariants
