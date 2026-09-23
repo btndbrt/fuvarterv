@@ -131,6 +131,29 @@ and every save is rejected.
 
 `supabase/migrations/README.md` has a read-only query that tells you what is applied.
 
+### Keeping the project awake
+
+A free-tier Supabase project is **paused after about a week without requests**, and
+restoring it is a manual click in the dashboard — so a quiet school holiday is enough for
+the club to come back to a dead app. [`.github/workflows/keepalive.yml`](../.github/workflows/keepalive.yml)
+sends one anon REST read a day to prevent that.
+
+It needs two **repository secrets** (Settings → Secrets and variables → Actions):
+`SUPABASE_URL` and `SUPABASE_ANON_KEY` — the same values Vercel holds. Both are public by
+design (Vite inlines them into the bundle), so the secrets are tidiness, not protection.
+Without them the workflow fails immediately with a message saying so, rather than passing
+while pinging nothing.
+
+**The trap.** GitHub **disables scheduled workflows after 60 days of repository
+inactivity**, and emails the owner a link to re-enable them. A keepalive is exactly the
+thing that dies this way, because the repository is quiet for the same reason the database
+is. If the app has had no commits for two months, check Actions before trusting the ping.
+Running it by hand (**Run workflow** on the Actions tab) also resets the clock.
+
+Use **Run workflow** after any change to the anon key or the RLS policies: a non-200 is
+reported as a failure, and the log distinguishes a 401 (wrong key) from a 5xx or timeout
+(project already paused).
+
 ---
 
 ## 6. Releasing (Vercel)
