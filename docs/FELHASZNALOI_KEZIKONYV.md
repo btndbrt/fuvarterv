@@ -1,7 +1,7 @@
 # Fuvarterv – Felhasználói kézikönyv
 
 Ez a kézikönyv lépésről lépésre bemutatja a Fuvartervet. Ha elakadsz, keresd meg a témát a tartalomjegyzékben,
-vagy nézd meg a [Gyakori kérdések](#16-gyakori-kérdések-és-hibaelhárítás) részt a végén.
+vagy nézd meg a [Gyakori kérdések](#15-gyakori-kérdések-és-hibaelhárítás) részt a végén.
 
 ---
 
@@ -21,9 +21,8 @@ vagy nézd meg a [Gyakori kérdések](#16-gyakori-kérdések-és-hibaelhárítá
 12. [Heti menetrend nyomtatása](#12-heti-menetrend-nyomtatása)
 13. [Felhasználók kezelése](#13-felhasználók-kezelése)
 14. [Mentés és korábbi mentések](#14-mentés-és-korábbi-mentések)
-15. [Mintaadatok visszaállítása](#15-mintaadatok-visszaállítása)
-16. [Gyakori kérdések és hibaelhárítás](#16-gyakori-kérdések-és-hibaelhárítás)
-17. [Fogalomtár](#17-fogalomtár)
+15. [Gyakori kérdések és hibaelhárítás](#15-gyakori-kérdések-és-hibaelhárítás)
+16. [Fogalomtár](#16-fogalomtár)
 
 ---
 
@@ -743,20 +742,7 @@ Ha elrontottál valamit, visszaléphetsz egy korábbi állapotra.
 
 ---
 
-## 15. Mintaadatok visszaállítása
-
-Az **Adatok** fül legalján van a **Mintaadatok visszaállítása** gomb. Ez **minden adatot
-felülír** bemutató adatokkal.
-
-> **Figyelem!** Éles használat közben **ne nyomd meg**. Ha mégis megtörtént, a
-> [Korábbi mentések](#korábbi-mentések-visszaállítása) segítségével visszaállíthatod az előző állapotot.
-
-Két lépésben működik: első kattintásra a felirat „Minden adat felülíródik!”-re vált, és csak a
-második kattintás hajtja végre.
-
----
-
-## 16. Gyakori kérdések és hibaelhárítás
+## 15. Gyakori kérdések és hibaelhárítás
 
 **Csak a Sofőr fület látom. Miért?**
 Mert a szerepköröd „Sofőr”. Ha adminisztrátori jog kell, kérd meg egy admint, hogy a
@@ -809,7 +795,7 @@ Használd a **↺ Korábbi mentések** gombot a fejlécben (lásd [14](#korábbi
 
 ---
 
-## 17. Fogalomtár
+## 16. Fogalomtár
 
 | Fogalom | Jelentése |
 |---|---|

@@ -135,10 +135,10 @@ Or in one step, installing Node if you do not have it: `./run-local.sh`.
 | `npm run build` | production build into `dist/` |
 | `npm run preview` | serve the built bundle |
 
-The first save seeds the shared workspace from `seedState()`. **That sample data is
-fictional** — placeholder driver names and plates, with real public places as stations
-and venues so the distances stay realistic. Replace it with your club's own data, or
-delete the rows from inside the app.
+A fresh workspace starts **empty**: the app no longer creates sample data, so the first
+thing an admin sees is a set of empty lists to fill in (start with [§Setup](#setup) step 4
+and the **Adatok** tab). The fictional sample club still exists in `src/data/seed.js`, but
+only as the test suite's fixture — no screen can reach it.
 
 ## Deploying to Netlify
 
@@ -187,7 +187,7 @@ Dependencies flow one way: `App → screens → ui → domain → data`.
 | Module | Contents |
 |---|---|
 | `src/data/storage.js` | the `window.storage` persistence seam and `DEFAULT_SETTINGS` |
-| `src/data/seed.js` | sample data and `ensureShape`, the shape normaliser |
+| `src/data/seed.js` | `ensureShape`, the shape normaliser — plus the test fixture |
 | `src/data/roles.js` | reading and writing the `user_roles` table |
 | `src/domain/constants.js` | days, months, `uid`, `byId` |
 | `src/domain/datetime.js` | Monday-first weeks, 24-hour times, local time throughout |

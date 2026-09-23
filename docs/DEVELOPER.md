@@ -134,7 +134,7 @@ flat config (`npm run lint`). See [§19](#19-tests).
 │   ├── supabaseStorage.js    ← implements window.storage on top of Supabase
 │   ├── data/
 │   │   ├── storage.js        ← window.storage seam + DEFAULT_SETTINGS
-│   │   └── seed.js           ← seedState + ensureShape
+│   │   └── seed.js           ← ensureShape (+ seedState, used only by tests)
 │   ├── domain/               ← pure, React-free, directly unit-testable
 │   │   ├── constants.js      ← DAYS / MONTHS / uid / byId
 │   │   ├── datetime.js       ← Monday-first weeks, 24h times
@@ -200,8 +200,8 @@ Follow the chain of events from page load to a working app:
      app (`children`).
 5. **`App` mounts.** Its first `useEffect` calls
    `loadState()`, which reads the saved blob through `window.storage.get(...)`. If
-   there is saved data, it loads it; if not, it seeds sample data. From here the app
-   is running normally.
+   there is saved data, it loads it; if not, it creates an EMPTY workspace and saves
+   it, which is what creates the row. From here the app is running normally.
 
 The important idea: **the app only mounts after a valid login and a successful
 database read.** That ordering prevents two classes of bug (unauthenticated
@@ -264,8 +264,8 @@ application state is one JSON object, turned into a string with `JSON.stringify`
 before `set`, and parsed with `JSON.parse` after `get`. In the app:
 
 ```js
-// Swallowing the error here would seed sample data over real data the app
-// merely failed to read, so loadState rethrows and the caller uses isNotFound
+// Swallowing the error here would write an EMPTY workspace over real data the
+// app merely failed to read, so loadState rethrows and the caller uses isNotFound
 // to tell "empty workspace" apart from "the read failed".
 async function loadState() {
   const r = await window.storage.get(STORAGE_KEY);
@@ -315,8 +315,8 @@ are `get` and `set`.
 **`get(key)`**
 - Selects `data, updated_at` from `app_state` where `id = key`.
 - If **no row** exists, it **throws `"key not found"`**. This is intentional — it
-  tells `loadState` "there's no saved data yet", so the app seeds sample data. A
-  fresh workspace and a missing key look the same, which is correct.
+  tells `loadState` "there's no saved data yet", so the app starts an empty
+  workspace. A fresh workspace and a missing key look the same, which is correct.
 - If a row exists, it remembers `updated_at` in a module-level `Map` called
   `lastSeen`, and returns the data as a JSON string.
 
@@ -370,8 +370,10 @@ the consequences are:
 It also does the **pre-flight read** described in [§4](#4-how-the-app-starts-up-boot-sequence):
 after login, before mounting the app, it does one test read of the workspace row.
 If that fails it shows a retry screen. This stops a temporary read failure from
-looking like an empty workspace (which would make the app show sample data over the
-user's real data — very alarming even though the real data is safe on the server).
+looking like an empty workspace — which would now mount the app on an empty state and
+let the debounced save write that emptiness over the user's real data. Since the
+fallback stopped being obviously-fake sample data, this guard is the only thing
+standing between a flaky network and a wipe.
 
 ### 6.5 Summary of the save/load flow
 
@@ -575,13 +577,17 @@ the UI warns that the matrix is stale.
 There is no database schema for the blob's *contents* — the app manages shape in
 code. Two functions handle this:
 
-**`seedState()`** returns a full sample dataset: the real club's teams, stations,
-venues, buses, drivers, trainings, and a set of Thursday rides. This is used the
-first time the app runs (no saved data) and when the user clicks "Mintaadatok
-visszaállítása" (Reset sample data).
+**`seedState()`** returns a full fictional dataset: teams, stations, venues, buses,
+drivers, trainings and a set of Thursday rides. **The app never calls it.** It used to
+run on first load and behind a "Mintaadatok visszaállítása" button; both are gone, so
+a fresh workspace starts empty and no fictional club can ever reach a real one. It
+survives as the fixture four test suites build on — the smoke test walks every tab
+against it, and the optimiser's property tests need real distances between real places
+to be worth anything.
 
-> ⚠️ **Privacy:** the seed contains real driver names and license plates. Anonymize
-> it before making the repo public, or keep the repo private.
+> **Privacy:** the names, plates and headcounts are placeholders; the stations and
+> venues are real public places, kept deliberately so the travel times are realistic.
+> Keep it that way — real personal data belongs in the running workspace, never here.
 
 **`ensureShape(s)`** is a lightweight "migration". Every time state is loaded, it is
 passed through `ensureShape`, which fills in any missing fields with defaults. This
@@ -594,7 +600,7 @@ The App load effect combines them:
 
 ```js
 const s = await loadState();                 // saved data or null
-setState(ensureShape(s || seedState()));     // seed if empty, then normalize
+setState(ensureShape(s || {}));              // empty workspace if none, then normalize
 ```
 
 **When you add a new field to an entity or setting, add its default to

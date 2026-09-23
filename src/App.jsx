@@ -10,7 +10,7 @@ import { CalendarDays, Boxes, Car, Workflow, HelpCircle, RotateCcw, LogOut } fro
 import "./ui/styles.css";
 import { RoleContext } from "./roleContext.js";
 import { loadState, persistState } from "./data/storage.js";
-import { ensureShape, seedState } from "./data/seed.js";
+import { ensureShape } from "./data/seed.js";
 import { isNotFound } from "./data/storage.js";
 import { HelpSheet } from "./ui/base.jsx";
 import { WeekScreen } from "./screens/WeekScreen.jsx";
@@ -39,9 +39,9 @@ export default function App() {
   const [rideTarget, setRideTarget] = useState(null);
   const [notice, setNotice] = useState("");
   const [loadError, setLoadError] = useState(false);
-  /* Driver plus an empty workspace. For an admin we seed sample data and SAVE it
-     (that is what creates the row); for a driver that write is both forbidden and
-     pointless. */
+  /* Driver plus an empty workspace. For an admin we create an empty state and SAVE
+     it (that is what creates the row); for a driver that write is both forbidden and
+     pointless, so they get told the workspace is empty instead. */
   const [emptyWs, setEmptyWs] = useState(false);
   const [retryTick, setRetryTick] = useState(0);
   const [helpOpen, setHelpOpen] = useState(false);
@@ -82,8 +82,9 @@ export default function App() {
           lastSaved.current = JSON.stringify(shaped);
           setState(shaped);
         } else if (isAdmin) {
-          // Empty value: seed sample data, which MUST be written out to create the row.
-          setState(ensureShape(seedState()));
+          // Empty value: an EMPTY workspace, which MUST still be written out to create
+          // the row. ensureShape({}) is a complete, valid state with no records in it.
+          setState(ensureShape({}));
         } else {
           setEmptyWs(true);
         }
@@ -91,15 +92,18 @@ export default function App() {
       } catch (e) {
         if (cancelled) return;
         if (isNotFound(e) && isAdmin) {
-          // Genuinely empty workspace → seed sample data (and persist it).
-          setState(ensureShape(seedState()));
+          // Genuinely empty workspace → start empty, and persist it so the row exists.
+          setState(ensureShape({}));
           loaded.current = true;
         } else if (isNotFound(e)) {
           setEmptyWs(true);
           loaded.current = true;
         } else {
-          // Real read failure (network/permissions) → show a retry screen,
-          // never mount the app on seed data over unread real data.
+          /* Real read failure (network/permissions) → show a retry screen. Mounting
+             an empty state here would be far worse than a blank screen: the debounced
+             save would then write that emptiness over real data nobody managed to
+             read. This is invariant I11, and it matters MORE now that the fallback
+             state is empty rather than obviously-fake sample data. */
           setLoadError(true);
         }
       }
@@ -138,7 +142,6 @@ export default function App() {
 
   const update = (fn) => setState((s) => fn(s));
   const openRide = (occ) => { setRideTarget(o2t(occ)); setTab("ride"); };
-  const resetSeed = () => { setState(ensureShape(seedState())); setNotice(""); };
 
   if (loadError) {
     return (
@@ -199,7 +202,7 @@ export default function App() {
       <main className="mx-auto w-full max-w-2xl" style={{ paddingBottom: 84 }}>
         {isAdmin && tab === "week" && <WeekScreen state={state} openRide={openRide} />}
         {isAdmin && tab === "sched" && <ScheduleScreen state={state} update={update} />}
-        {isAdmin && tab === "data" && <DataScreen state={state} update={update} resetSeed={resetSeed} notice={notice} setNotice={setNotice} myEmail={myEmail} />}
+        {isAdmin && tab === "data" && <DataScreen state={state} update={update} notice={notice} setNotice={setNotice} myEmail={myEmail} />}
         {tab === "driver" && <DriverScreen state={state} myEmail={myEmail} />}
         {isAdmin && tab === "ride" && <RideScreen state={state} update={update} target={rideTarget} setTarget={setRideTarget} onExit={() => { setRideTarget(null); setTab("week"); }} />}
       </main>

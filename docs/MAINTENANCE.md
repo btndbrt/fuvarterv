@@ -88,8 +88,10 @@ A checklist to run before committing.
       out.
 - [ ] A new external call has a **CSP** directive in `netlify.toml` and a fallback path
       (E5).
-- [ ] If you touched the load or save path, sample data still cannot be seeded over real
-      data (I11, in the spirit of `test/load-error.test.js`).
+- [ ] If you touched the load or save path, an **empty** state still cannot be written
+      over real data that merely failed to load (I11, `test/load-error.test.js`). This is
+      sharper than it was: the fallback state is now empty rather than obviously-fake
+      sample data, so the same bug would look like a successful wipe.
 
 ---
 
@@ -216,10 +218,11 @@ files and lines.
 
 ## 8. Privacy
 
-The sample data in `src/data/seed.js` is **fictional**: placeholder driver names and
-plates, with real public places as stations and venues so the distances stay realistic.
-Keep it that way. Real names, phone numbers and plates belong in the running workspace,
-never in the repository.
+The fixture in `src/data/seed.js` is **fictional**: placeholder driver names and plates,
+with real public places as stations and venues so the distances stay realistic. Keep it
+that way. Real names, phone numbers and plates belong in the running workspace, never in
+the repository — and since nothing in the app reads this file any more, there is no longer
+even a convenience argument for putting them there.
 
 Driver e-mail addresses live in the workspace blob, which means they are readable by every
 authenticated user. That is intentional (the driver list is not a secret within the club),

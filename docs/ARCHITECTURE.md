@@ -439,7 +439,7 @@ daily cost can then go **up** after optimising.
 
 | Service | Used for | Failure behaviour | Visible? |
 |---|---|---|---|
-| Supabase | auth, storage, roles | retry screen; never seeds over unread data | yes |
+| Supabase | auth, storage, roles | retry screen; never writes over unread data | yes |
 | OSRM | the deadhead matrix | haversine estimate at `estSpeedKmh` | yes, `matrix.source` |
 | Nominatim | address search in the map picker | an error line; pick by hand or paste a coordinate | yes |
 | Leaflet + OSM tiles | the map picker | the built-in offline SVG picker | yes |
@@ -508,7 +508,7 @@ manual checkpoints — see [`MAINTENANCE.md`](MAINTENANCE.md).
 ### A new field on an entity
 
 1. `ensureShape` — give it a default that reproduces the **previous** behaviour (E8).
-2. `seedState` — fill it in the sample data if that is meaningful.
+2. `seedState` — fill it in the test fixture if that is meaningful (tests only; the app never reads it).
 3. The form: a field in `MasterForm` / `TeamForm` / `TrainingForm`, plus normalisation on
    save.
 4. If anything will reference it, extend `deleteGuard` (I10).
