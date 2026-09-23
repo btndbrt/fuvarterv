@@ -256,7 +256,7 @@ módosíthatod. Az adatlap alján van a **Csapat törlése** gomb.
 Az adatlapon, az **Állomások (felszállóhelyek)** részben:
 
 1. **Kattints** azokra az állomásokra, ahol a csapat tagjai felszállnak. A bekapcsolt
-   állomás sötét lesz.
+   állomás kiemelve, színes háttérrel jelenik meg.
 2. Megjelenik a **Létszám megállónként** doboz. Írd be, hány ember száll fel az egyes megállókon.
    Jobb felül a **Σ** jel mellett látod az összesítést.
 
