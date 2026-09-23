@@ -1,7 +1,6 @@
 # Fuvarterv – Felhasználói kézikönyv
 
-Ez a kézikönyv lépésről lépésre bemutatja, hogyan használd a Fuvartervet. Nem kell
-hozzá semmilyen műszaki előismeret. Ha elakadsz, keresd meg a témát a tartalomjegyzékben,
+Ez a kézikönyv lépésről lépésre bemutatja a Fuvartervet. Ha elakadsz, keresd meg a témát a tartalomjegyzékben,
 vagy nézd meg a [Gyakori kérdések](#16-gyakori-kérdések-és-hibaelhárítás) részt a végén.
 
 ---
@@ -33,7 +32,7 @@ vagy nézd meg a [Gyakori kérdések](#16-gyakori-kérdések-és-hibaelhárítá
 A Fuvarterv a klub edzésszállításait szervezi. Segítségével:
 
 - nyilvántartod a **csapatokat**, az **edzéseket**, a **megállókat**, a **járműveket** és a **sofőröket**;
-- a program **kiszámolja a heti beosztást**: melyik sofőr, melyik busszal, mikor és milyen útvonalon viszi a gyerekeket az edzésre és haza;
+- a program **kiszámolja a heti beosztást**: melyik sofőr, melyik busszal, mikor és milyen útvonalon viszi a sportolókat az edzésre és haza;
 - a beosztás úgy készül, hogy **a lehető legkevesebbe kerüljön**, és **a munka arányosan oszoljon el** a sofőrök között;
 - a sofőrök a telefonjukon látják a **saját napi útvonalukat**, nagy betűkkel;
 - **kinyomtathatod** egy sofőr heti menetrendjét táblázatban.
@@ -64,7 +63,7 @@ Kétféle felhasználó van:
 
 1. Nyisd meg a Fuvarterv címét a böngészőben (telefonon vagy számítógépen).
 2. Írd be az **E-mail** címedet és a **Jelszavadat**.
-3. Koppints a **Bejelentkezés** gombra.
+3. Kattints a **Bejelentkezés** gombra.
 
 Ha nincs még fiókod, vagy elfelejtetted a jelszavad, fordulj a klub rendszergazdájához.
 
@@ -81,8 +80,8 @@ Ha nincs még fiókod, vagy elfelejtetted a jelszavad, fordulj a klub rendszerga
 **Alul** találod a **füleket** (fő menü): **Hét**, **Beosztás**, **Adatok**, **Sofőr**.
 A kiválasztott fül világít.
 
-**Kis kérdőjelek (?)**: sok gomb és mező mellett van egy kis kérdőjel. Koppints rá, és
-megjelenik egy rövid magyarázat. Máshova koppintva eltűnik.
+**Kis kérdőjelek (?)**: sok gomb és mező mellett van egy kis kérdőjel. Kattints rá, és
+megjelenik egy rövid magyarázat. Máshova kattintva eltűnik.
 
 > **Tipp:** a program színei a telefonod beállításához igazodnak. Ha a telefonod sötét
 > módban van, a Fuvarterv is sötét lesz.
@@ -93,7 +92,7 @@ megjelenik egy rövid magyarázat. Máshova koppintva eltűnik.
 
 Ha most kezded, ebben a sorrendben dolgozz. A részletek a hivatkozott fejezetekben vannak.
 
-1. **Állomások** felvétele – ahol a gyerekek fel- és leszállnak. ([5.1](#51-állomások))
+1. **Állomások** felvétele – ahol a sportolók fel- és leszállnak. ([5.1](#51-állomások))
 2. **Helyszínek** felvétele – ahol az edzések vannak. ([5.2](#52-helyszínek))
 3. **Telephely** felvétele – ahol a buszok éjszakáznak. ([5.3](#53-telephelyek))
 4. **Járművek** felvétele. ([5.4](#54-járművek))
@@ -125,7 +124,7 @@ Az **állomás** egy fel- vagy leszállóhely, például egy falu főtere vagy e
 1. **Adatok → Állomások → Új állomás**.
 2. Add meg a **Nevet** (pl. „Zákányszék, Fő tér”).
 3. Ha tudod, írd be a **Címet** (ez csak tájékoztató).
-4. **Koordináta \*** – koppints a **Kijelölés térképen** gombra, és jelöld meg a pontot
+4. **Koordináta \*** – kattints a **Kijelölés térképen** gombra, és jelöld meg a pontot
    (lásd [5.6](#56-hely-kijelölése-a-térképen)).
 5. **Mentés**.
 
@@ -181,7 +180,7 @@ külön megadhatod (lásd [5.4](#54-járművek)).
 | Mező | Mit írj bele? |
 |---|---|
 | **Név \*** | A sofőr neve. |
-| **Telefonszám** | A listában erre koppintva fel is hívhatod. |
+| **Telefonszám** | A listában erre kattintva fel is hívhatod. |
 | **E-mail (belépéshez)** | Ha a sofőr ezzel a címmel lép be, a Sofőr fülön rögtön a **saját** napja nyílik meg. |
 | **Preferált jármű** | Ha a sofőr általában ugyanazt a buszt vezeti. A program ezt előnyben részesíti, de nem kötelező érvényű. |
 | **Órabér (Ft/óra)** | A sofőr órabére. Alapértelmezés: 3000 Ft. |
@@ -191,7 +190,7 @@ külön megadhatod (lásd [5.4](#54-járművek)).
 
 **Elérhetőség megadása:**
 
-1. Koppints az **Idősáv hozzáadása** gombra.
+1. Kattints az **Idősáv hozzáadása** gombra.
 2. Jelöld be a napokat (**H, K, Sze, Cs, P, Szo, V**).
 3. Add meg, mettől meddig ér rá (pl. 15:00–21:00).
 4. Több idősávot is felvehetsz. Az **X** gombbal törölhetsz egy idősávot.
@@ -207,13 +206,13 @@ külön megadhatod (lásd [5.4](#54-járművek)).
 Az állomás, a helyszín és a telephely űrlapján a **Kijelölés térképen** (vagy **Módosítás
 térképen**) gombbal nyílik meg a térkép.
 
-1. **Keresés:** írj be egy címet a felső mezőbe (pl. „Szeged, Kossuth utca 1.”), és koppints
+1. **Keresés:** írj be egy címet a felső mezőbe (pl. „Szeged, Kossuth utca 1.”), és kattints
    a nagyító gombra. Válaszd ki a találatot – a térkép odaugrik.
    *A keresés csak odaviszi a térképet, még nem jelöli ki a pontot!*
-2. **Kijelölés:** koppints (vagy nyomj hosszan) a pontos helyre a térképen. Megjelenik a jelölő.
-3. **Pontosítás:** a jelölőt ujjal (vagy egérrel) arrébb húzhatod. Új koppintás felülírja az előzőt.
+2. **Kijelölés:** kattints (vagy nyomj hosszan) a pontos helyre a térképen. Megjelenik a jelölő.
+3. **Pontosítás:** a jelölőt ujjal (vagy egérrel) arrébb húzhatod. Új kattintás felülírja az előzőt.
 4. Alul a **Kijelölt pont** alatt látod a koordinátát.
-5. Koppints a **Mentés** gombra.
+5. Kattints a **Mentés** gombra.
 
 **Koordináta beillesztése:** ha például a Google Térképről kimásoltad a koordinátát, alul a
 „Koordináta beillesztése” mezőbe beírhatod ilyen formában: `46.25311, 20.14503`, majd
@@ -226,8 +225,8 @@ térképen**) gombbal nyílik meg a térkép.
 
 A törlés **két lépésben** történik, hogy véletlenül ne törölj semmit:
 
-1. Koppints a **kuka** gombra – a gomb pirosra vált.
-2. **3 másodpercen belül** koppints rá még egyszer. Ha nem teszed, a gomb visszaáll.
+1. Kattints a **kuka** gombra – a gomb pirosra vált.
+2. **3 másodpercen belül** kattints rá még egyszer. Ha nem teszed, a gomb visszaáll.
 
 Amit **használ** valami, azt nem lehet törölni. Ilyenkor ezt látod:
 „**Nem törölhető. Használatban: …**” – például egy állomást, amely szerepel egy csapat
@@ -244,21 +243,21 @@ használatot, utána törölhetsz.
 
 1. **Adatok → Csapatok → Új csapat**.
 2. **Név \*** (pl. „U12 Lány”), **Korosztály** (pl. U12), **Nem** (lány, fiú, női, férfi, vegyes).
-3. **Szállítandó létszám** – hány gyereket kell vinni. Ez csak **tartalék érték**: akkor
+3. **Szállítandó létszám** – hány embert kell vinni. Ez csak **tartalék érték**: akkor
    számít, ha megállónként nem adsz meg létszámot.
 4. **Szín** – ezzel a színnel jelenik meg a csapat a Hét fülön.
 5. **Mentés**.
 
-A csapatra koppintva megnyílik az **adatlapja**. A jobb felső **ceruzával** a fenti adatokat
+A csapatra kattintva megnyílik az **adatlapja**. A jobb felső **ceruzával** a fenti adatokat
 módosíthatod. Az adatlap alján van a **Csapat törlése** gomb.
 
 ### 6.2 Állomások és létszám megállónként
 
 Az adatlapon, az **Állomások (felszállóhelyek)** részben:
 
-1. **Koppints** azokra az állomásokra, ahol a csapat gyerekei felszállnak. A bekapcsolt
+1. **Kattints** azokra az állomásokra, ahol a csapat tagjai felszállnak. A bekapcsolt
    állomás sötét lesz.
-2. Megjelenik a **Létszám megállónként** doboz. Írd be, hány gyerek száll fel az egyes megállókon.
+2. Megjelenik a **Létszám megállónként** doboz. Írd be, hány ember száll fel az egyes megállókon.
    Jobb felül a **Σ** jel mellett látod az összesítést.
 
 > **Nagyon fontos különbség – 0 vagy üres?**
@@ -284,7 +283,7 @@ Ha legalább két állomás be van kapcsolva, megjelenik az **Útvonal** doboz:
 Alapesetben a busz hazafelé ugyanazokat a megállókat érinti, fordított sorrendben
 (**Megegyezik az odaúttal**).
 
-Ha a gyerekek máshol szállnak le, mint ahol felszálltak:
+Ha a sportolók máshol szállnak le, mint ahol felszálltak:
 
 1. Válaszd a **Külön lista** lehetőséget.
 2. Kapcsold be a leszállóhelyeket, és add meg a létszámokat.
@@ -294,12 +293,12 @@ A visszaút teljesen független az odaúttól: lehet kevesebb, több vagy egész
 
 ### 6.5 Helyszínek hozzárendelése
 
-Az adatlap **Helyszínek** részében koppints azokra a helyszínekre, ahol a csapat edz.
+Az adatlap **Helyszínek** részében kattints azokra a helyszínekre, ahol a csapat edz.
 **Edzést csak olyan helyszínre vehetsz fel, amely itt be van kapcsolva.**
 
 ### 6.6 Edzések felvétele
 
-1. A csapat adatlapján, az **Edzések** résznél koppints az **Új edzés** gombra.
+1. A csapat adatlapján, az **Edzések** résznél kattints az **Új edzés** gombra.
 2. **Helyszín \*** – válaszd ki.
 3. **Ismétlődés:**
    - **Heti** – minden héten ismétlődik. Jelöld be a **Napokat** (pl. K és Cs).
@@ -307,12 +306,12 @@ Az adatlap **Helyszínek** részében koppints azokra a helyszínekre, ahol a cs
 4. **Kezdés \*** és **Vége \*** időpont.
 5. **Mentés**.
 
-Az edzés sorára koppintva megnyílik az edzés részletes lapja. A kuka gombbal törölheted az edzést
+Az edzés sorára kattintva megnyílik az edzés részletes lapja. A kuka gombbal törölheted az edzést
 (a hozzá tartozó fuvarokkal együtt).
 
 ### 6.7 Edzés saját megállólistával
 
-Előfordul, hogy egy edzés **más helyszínen** van, vagy **más megállókról** kell hozni a gyerekeket.
+Előfordul, hogy egy edzés **más helyszínen** van, vagy **más megállókról** kell hozni a sportolókat.
 
 1. Nyisd meg az edzést.
 2. A **Megállók** résznél válaszd a **Saját lista** lehetőséget.
@@ -353,7 +352,7 @@ Fentről lefelé:
    | **becsült ktg.** | A nap becsült költsége forintban. |
 
 4. **Figyelmeztetések** – ha van, egy sárga sáv mutatja a számukat (pl. „2 figyelmeztetés”).
-   Koppints rá a részletekért. Például: nincs telephely, vagy egy csapathoz nem készült
+   Kattints rá a részletekért. Például: nincs telephely, vagy egy csapathoz nem készült
    feladat, mert hiányzik a létszám.
 5. **Gombok:** **Heti beosztás optimalizálása**, **Mátrix**, **Heti menetrend nyomtatása**.
 6. A **Mátrix** állapota (lásd [7.3](#73-mátrix--pontos-utazási-idők)).
@@ -369,14 +368,28 @@ alapértéken.
 |---|---|---|
 | **Érkezés edzés előtt (perc)** | Ennyivel az edzés kezdete előtt érjen oda a busz. | 10 perc |
 | **Indulás edzés után (perc)** | Ennyivel az edzés vége után induljon haza a busz. | 10 perc |
-| **Kiszállási díj (Ft)** | Egyszeri díj minden kiállásért (műszakonként). | 1500 Ft |
+| **Kiszállási díj (Ft)** | Egyszeri díj minden kiállásért (műszakonként). Ez ösztönzi a programot, hogy egy sofőrnek több feladatot adjon egymás után (lásd a táblázat alatti dobozt). | 1500 Ft |
 | **Megállónkénti idő (perc)** | Ennyi ideig áll a busz egy megállóban. | 2 perc |
 | **Becsült sebesség (km/h)** | Ezzel becsül a program, ha nincs pontos útvonaladat. | 50 km/h |
-| **Alap üresjárat adat híján (perc)** | Ezt használja, ha semmilyen adat nincs két pont között. | 12 perc |
+| **Alap üresjárat adat híján (perc)** | Csak akkor számol vele a program, ha egy pontnak **egyáltalán nincs koordinátája**. Mivel koordináta nélkül nem lehet pontot menteni, ez a gyakorlatban szinte soha nem fordul elő – ha mégis, ne ezt az értéket állítsd, hanem pótold a koordinátát (sárga figyelmeztető jel, lásd [5.1](#51-állomások)). | 12 perc |
 | **Üresjárat költsége (Ft/perc)** | Mennyibe kerül egy perc utas nélküli út (üzemanyag, kopás). Ez tartja vissza a programot attól, hogy feleslegesen hazaküldje a buszt. | 100 Ft/perc |
 | **Preferált jármű súlya (Ft)** | Mennyire ragaszkodjon a sofőr saját buszához. 0 = nem számít. | 1000 |
 | **Egyenletes terhelés súlya (Ft)** | Mennyire ossza el egyenletesen a munkát a sofőrök között. 0 = csak a költség számít. | 5000 |
 | **Klub telephelye** | Innen indulnak a buszok, ha a járműnél nincs más megadva. | nincs megadva |
+
+> **Mennyi legyen a kiszállási díj?**
+>
+> Ez a szám dönti el, **mennyi várakozás éri meg egy újabb kiállás helyett**. A program akkor
+> ad két feladatot ugyanannak a sofőrnek, ha a köztük lévő várakozás bére kevesebb, mint egy
+> újabb kiszállási díj.
+>
+> A fordulópont: **kiszállási díj ÷ percenkénti bér**. Az alapértékekkel (1500 Ft díj,
+> 3000 Ft/óra = 50 Ft/perc) ez **30 perc** — vagyis a program inkább megvárat egy sofőrt fél
+> órát, mint hogy másikat küldjön ki.
+>
+> - **Nagyobb érték** → több láncolás: kevesebb sofőr, de többet várnak.
+> - **Kisebb érték** → kevesebb várakozás, de több kiállás.
+> - **0** → a program egyáltalán nem láncol, minden feladat külön kiállás lesz.
 
 ### 7.3 Mátrix – pontos utazási idők
 
@@ -393,7 +406,7 @@ helyszín és telephely között, és eltárolja őket. Így a beosztás sokkal 
 
 Ez a program legfontosabb funkciója. Egy gombnyomással elkészíti **az egész hét** beosztását.
 
-1. Koppints a **Heti beosztás optimalizálása** gombra.
+1. Kattints a **Heti beosztás optimalizálása** gombra.
 2. Megjelenik a **„Optimalizálás folyamatban…”** ablak. **Várj türelmesen** – ez több másodpercig
    is eltarthat. Ne zárd be az oldalt. A javaslat magától megjelenik.
 3. Megnyílik a **Heti optimalizálás — előtte / utána** ablak. Nézd át:
@@ -406,7 +419,7 @@ Ez a program legfontosabb funkciója. Egy gombnyomással elkészíti **az egész
    - **Figyelmeztetések:** például ha egy feladatot **nem lehet lefedni** (és miért), vagy
      hogy **hány kézzel felvett fuvar cserélődik le**.
 
-4. Ha rendben van, koppints az **Alkalmazás és fuvarok rögzítése** gombra.
+4. Ha rendben van, kattints az **Alkalmazás és fuvarok rögzítése** gombra.
    Ha nem, a **Mégse** gombbal semmi nem változik.
 
 **Mi történik az alkalmazáskor?**
@@ -460,7 +473,7 @@ a pénz csak a műszak **első** láncánál szerepel, a többinél ez áll: „
 
 Ha nem tetszik, hogy egy feladatot ki visz:
 
-1. A feladat sorában koppints a **két irányú nyíl** gombra (**Áthelyezés**).
+1. A feladat sorában kattints a **két irányú nyíl** gombra (**Áthelyezés**).
 2. Válassz:
    - **Meglévő láncba** – egy másik sofőr már meglévő láncához teszed;
    - **Fedetlenek közé** – kiveszed a láncból;
@@ -477,10 +490,10 @@ Ha nem tetszik, hogy egy feladatot ki visz:
 A **zárolás** azt jelenti: „ezt már megbeszéltem, ne változtasd meg”. A zárolt dolgokhoz az
 optimalizálás **nem nyúl**.
 
-**Egy feladat zárolása:** a lánc kártyáján, a feladat sorában koppints a **lakat** gombra.
+**Egy feladat zárolása:** a lánc kártyáján, a feladat sorában kattints a **lakat** gombra.
 Zárva sötét, nyitva világos.
 
-**Egy egész lánc zárolása:** a kártya fejlécében koppints a **lakat** gombra. Ilyenkor:
+**Egy egész lánc zárolása:** a kártya fejlécében kattints a **lakat** gombra. Ilyenkor:
 - a lánc feladatai, a sofőr és a jármű **együtt maradnak**;
 - a program **hozzáfűzhet** még új feladatot a lánchoz, de ami így kerül bele, az nem lesz zárolva;
 - a láncon belüli feladatok lakatja ilyenkor zárva látszik, és nem kapcsolható – a feloldás a
@@ -510,7 +523,7 @@ A fedetlen feladatot az **Áthelyezés** gombbal kézzel is beoszthatod.
 A **Hét** fül a hét **összes edzését** mutatja, napokra bontva, csapatszínekkel.
 
 - A **nyilakkal** előző vagy következő hétre lapozhatsz.
-- A **dátumra** koppintva visszaugrasz az aktuális hétre.
+- A **dátumra** kattintva visszaugrasz az aktuális hétre.
 - A mai napnál **MA** felirat látszik.
 
 **Egy edzés kártyáján:**
@@ -526,18 +539,18 @@ A **Hét** fül a hét **összes edzését** mutatja, napokra bontva, csapatszí
 | **pl. 12/8 FŐ** (piros) | Több utas, mint férőhely. | Nagyobb jármű kell, vagy több fuvar. |
 | **lakat** | A fuvar zárolva van. | – |
 
-A kártyára koppintva megnyílik a **Fuvar szerkesztő**.
+A kártyára kattintva megnyílik a **Fuvar szerkesztő**.
 
 ---
 
 ## 10. Egy fuvar szerkesztése (Fuvar szerkesztő)
 
-Ide a **Hét** fülön egy edzés kártyájára koppintva jutsz.
+Ide a **Hét** fülön egy edzés kártyájára kattintva jutsz.
 
 ### 10.1 A fuvarok közötti választás
 
 Ha az edzéshez már van fuvar, fent **gombok** mutatják őket (pl. „1. fuvar · ODA · Anna”).
-Koppints arra, amelyiket szerkeszteni szeretnéd, vagy a **＋ Új fuvar** gombra.
+Kattints arra, amelyiket szerkeszteni szeretnéd, vagy a **＋ Új fuvar** gombra.
 
 A fejléc alatti dobozban látod a csapatot, az irányt, a napot, az edzés idejét és a helyszínt.
 
@@ -603,7 +616,7 @@ Ezt a nézetet elsősorban a **sofőrök** használják, a telefonjukon. Nagy be
 
 - **Sofőr kiválasztása:** fent a nevek közül. Aki sofőrként lép be, és az e-mail címe egyezik a
   sofőr adatlapján megadottal, annak **rögtön a saját napja** nyílik meg.
-- **Nap váltása:** a **nyilakkal** előre-hátra. A dátumra koppintva visszaugrasz **mára**
+- **Nap váltása:** a **nyilakkal** előre-hátra. A dátumra kattintva visszaugrasz **mára**
   (ilyenkor **MA** felirat látszik).
 
 **Mit mutat?**
@@ -620,7 +633,7 @@ Ezt a nézetet elsősorban a **sofőrök** használják, a telefonjukon. Nagy be
 - a nézet **percenként magától frissül**.
 
 > **Tipp sofőröknek:** a telefon kijelzőjét érdemes úgy beállítani, hogy vezetés közben ne
-> kapcsoljon ki. Vezetés közben ne nyúlj a telefonhoz!
+> kapcsoljon ki.
 
 ---
 
@@ -633,8 +646,8 @@ Egy kiválasztott sofőr **egész heti** fuvarjait nyomtathatod ki táblázatban
    heti optimalizálást.
 2. Megnyílik a nyomtatási nézet. **Válaszd ki a sofőrt** a listából (csak azok szerepelnek, akiknek
    van fuvarja; a név mellett a fuvarok száma).
-3. Koppints a **Menetrend megjelenítése** gombra.
-4. Nézd át a táblázatot, majd koppints a **Nyomtatás** gombra. Megnyílik a böngésző nyomtatási
+3. Kattints a **Menetrend megjelenítése** gombra.
+4. Nézd át a táblázatot, majd kattints a **Nyomtatás** gombra. Megnyílik a böngésző nyomtatási
    ablaka – itt választhatod a nyomtatót, vagy a **Mentés PDF-ként** lehetőséget.
 
 **Mit tartalmaz a lap?**
@@ -663,7 +676,7 @@ Itt döntöd el, ki mit érhet el.
 **Új felhasználó felvétele:**
 1. Írd be az **e-mail címét**. Ez ugyanaz legyen, amivel a fiókja létre lett hozva.
 2. Válaszd ki a **Szerepkört**: **Sofőr** vagy **Admin**.
-3. Koppints a **Felvétel** gombra.
+3. Kattints a **Felvétel** gombra.
 
 **Szerepkör módosítása:** a felhasználó sorában válaszd ki az új szerepkört a legördülő listából.
 
@@ -672,7 +685,7 @@ Itt döntöd el, ki mit érhet el.
 > **Jó tudni:**
 > - A változás a felhasználó **következő belépésekor** vagy az oldal **újratöltésekor** lép életbe.
 > - **Saját magadat** nem tudod lefokozni vagy törölni – így nem zárhatod ki magad véletlenül.
-> - A felhasználói **fiókot** (e-mail + jelszó) a klub rendszergazdája hozza létre. Itt csak a
+> - A felhasználói **fiókot** (e-mail + jelszó) a fejlesztő hozza létre. Itt csak a
 >   jogosultságot állítod be.
 
 ---
@@ -688,10 +701,10 @@ Minden változtatás **magától mentődik**, néhány tized másodpercen belül
 - **„A mentés nem sikerült”** (felugró üzenet): valószínűleg megszakadt az internet. Ellenőrizd a
   kapcsolatot, és ismételd meg az utolsó módosítást.
 - **„Az adatok máshol módosultak”**: közben **valaki más is mentett** (például egy másik admin egy
-  másik gépen). Hogy ne írd felül az ő munkáját, a program letiltja a mentést. Koppints az
+  másik gépen). Hogy ne írd felül az ő munkáját, a program letiltja a mentést. Kattints az
   **Újratöltés** gombra, és a legfrissebb adatokkal dolgozz tovább. *Az utolsó, még nem mentett
   változtatásod ilyenkor elveszhet.*
-- **„Nem sikerült betölteni”**: hálózati hiba. Az adataid biztonságban vannak. Koppints az
+- **„Nem sikerült betölteni”**: hálózati hiba. Az adataid biztonságban vannak. Kattints az
   **Újrapróbálkozás** gombra.
 
 > **Tipp:** egyszerre lehetőleg **csak egy ember** szerkessze az adatokat.
@@ -700,10 +713,10 @@ Minden változtatás **magától mentődik**, néhány tized másodpercen belül
 
 Ha elrontottál valamit, visszaléphetsz egy korábbi állapotra.
 
-1. A fejlécben koppints a **↺ Korábbi mentések** gombra.
+1. A fejlécben kattints a **↺ Korábbi mentések** gombra.
 2. Megjelenik a lista (az utolsó **20** mentés): mikor készült, és mennyi csapat, sofőr, jármű,
    edzés és fuvar volt benne.
-3. A kívánt sornál koppints a **Visszaállítás** gombra, majd az **Igen** gombra.
+3. A kívánt sornál kattints a **Visszaállítás** gombra, majd az **Igen** gombra.
 4. Az oldal újratöltődik a visszaállított adatokkal.
 
 > **Nyugodtan próbáld ki:** a visszaállítás előtti állapot is bekerül a korábbi mentések közé,
@@ -719,24 +732,24 @@ felülír** bemutató adatokkal.
 > **Figyelem!** Éles használat közben **ne nyomd meg**. Ha mégis megtörtént, a
 > [Korábbi mentések](#korábbi-mentések-visszaállítása) segítségével visszaállíthatod az előző állapotot.
 
-Két lépésben működik: első koppintásra a felirat „Minden adat felülíródik!”-re vált, és csak a
-második koppintás hajtja végre.
+Két lépésben működik: első kattintásra a felirat „Minden adat felülíródik!”-re vált, és csak a
+második kattintás hajtja végre.
 
 ---
 
 ## 16. Gyakori kérdések és hibaelhárítás
 
-**Sofőrként belépve csak a Sofőr fület látom. Miért?**
+**Csak a Sofőr fület látom. Miért?**
 Mert a szerepköröd „Sofőr”. Ha adminisztrátori jog kell, kérd meg egy admint, hogy a
 **Felhasználók** listán állítson át.
 
 **Sofőrként belépve nem a saját napomat látom.**
 Az adataidnál (Adatok → Sofőrök) az **E-mail (belépéshez)** mezőben pontosan az a cím legyen,
-amivel belépsz. Addig is fent a nevedre koppintva kiválaszthatod magad.
+amivel belépsz. Addig is fent a nevedre kattintva kiválaszthatod magad.
 
 **A Hét fülön „NINCS FUVAR” áll az edzésnél.**
 Még nem készült beosztás, vagy nem alkalmaztad. Menj a **Beosztás** fülre, futtasd a **Heti
-beosztás optimalizálása** gombot, és koppints az **Alkalmazás és fuvarok rögzítése** gombra. Ha
+beosztás optimalizálása** gombot, és kattints az **Alkalmazás és fuvarok rögzítése** gombra. Ha
 utána is ott áll, nézd meg a **Fedetlen feladatokat** és a **figyelmeztetéseket**.
 
 **Egy csapathoz egyáltalán nem készül feladat.**
@@ -751,7 +764,7 @@ Vagy a Beosztás fülön zárold a feladatot, illetve a láncot.
 
 **Az utazási idők nem stimmelnek.**
 - Ellenőrizd, hogy a pontok **koordinátái** jó helyen vannak-e.
-- Koppints a **Mátrix** gombra, hogy friss közúti menetidők legyenek.
+- Kattints a **Mátrix** gombra, hogy friss közúti menetidők legyenek.
 
 **Túl magas a költség / sokat vár a sofőr.**
 - Ellenőrizd, hogy van-e **telephely** megadva.
@@ -781,7 +794,7 @@ Használd a **↺ Korábbi mentések** gombot a fejlécben (lásd [14](#korábbi
 
 | Fogalom | Jelentése |
 |---|---|
-| **Állomás** | Megálló, ahol a gyerekek fel- vagy leszállnak. |
+| **Állomás** | Megálló, ahol a sportolók fel- vagy leszállnak. |
 | **Helyszín** | Ahol az edzés van. |
 | **Telephely** | Ahol a busz áll; innen indul és ide tér vissza. |
 | **ODA** | Út a megállókból a helyszínre. |
