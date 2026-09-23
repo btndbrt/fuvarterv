@@ -174,7 +174,13 @@
 .iconbtn{display:inline-flex;align-items:center;justify-content:center;width:42px;height:42px;border-radius:12px;border:1px solid var(--line);background:var(--card);color:var(--ink2);cursor:pointer;}
 .iconbtn:focus-visible{outline:3px solid var(--acc-soft);outline-offset:2px;}
 .chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--card);border-radius:999px;padding:8px 14px;font-weight:700;font-size:14px;cursor:pointer;min-height:40px;}
-.chip.on{background:var(--surface-inv);border-color:var(--surface-inv);color:var(--on-inv);}
+/* The accent, NOT --surface-inv. That token is a dramatic inversion in light mode
+   but only a RAISED surface in dark mode (#242A34 on a #181C24 card): a 1.18:1
+   background shift, while --line and --ink already equal the "on" border and text.
+   So a selected chip was very nearly invisible in dark mode — and the chip's fill is
+   the only thing marking selection in ten places, from the stop toggles to the
+   weekday picker. The accent reads the same in both themes. */
+.chip.on{background:var(--acc-strong);border-color:var(--acc-strong);color:var(--on-acc);}
 .chip:focus-visible{outline:3px solid var(--acc-soft);outline-offset:2px;}
 .plate{display:inline-flex;align-items:stretch;border:1.5px solid var(--ink);border-radius:5px;overflow:hidden;background:var(--plate-bg);line-height:1;}
 .plate i{background:#1B44A8;color:#fff;font-style:normal;font-size:9px;display:flex;align-items:flex-end;padding:2px 3px;font-weight:800;}
