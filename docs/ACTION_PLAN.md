@@ -249,7 +249,7 @@ driver-role user **cannot** see the list.
 |---|---|
 | **Multiple concurrent editors (CRDT or merge)** | R3 is a conscious trade-off. The single-editor model is documented, visible, and matches how the club actually works. A large step with no demonstrated need. |
 | **A TypeScript migration** | The domain is already heavily tested and `ensureShape` is the runtime shape defence. The cost today (the whole tree plus the tests) exceeds the benefit. If it ever happens: `checkJS` plus JSDoc on `src/domain/` first, incrementally. |
-| **Our own backend** | ADR-09. Supabase and Vercel give exactly what is needed with nothing to operate. |
+| **Our own backend** | ADR-09. Supabase and Netlify give exactly what is needed with nothing to operate. |
 | **Moving the optimizer into a Web Worker** | R8. **Measure first.** The worst case measured today is about a second and a half. Optimising without measuring is guessing. |
 | **Adding Prettier** | The style is already consistent, by hand. A formatting pull request would flatten `git blame` across the whole tree — a real loss in a codebase where the comments carry the knowledge. |
 

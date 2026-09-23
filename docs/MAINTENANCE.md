@@ -8,7 +8,8 @@ touch the code. The "why is it like this" belongs to
 
 ## 1. Development environment
 
-Node **20 or newer** (`engines` in `package.json`, which Vercel reads too).
+Node **20 or newer** (`engines` in `package.json`; the deployed build pins its own
+version through `NODE_VERSION` in `netlify.toml`).
 
 ```bash
 cp .env.example .env      # VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY
@@ -85,7 +86,7 @@ A checklist to run before committing.
       it is **also in `skelCost`** (the golden rule in ADR-15).
 - [ ] A bug fix comes with a **regression test** describing the wrong behaviour it rules
       out.
-- [ ] A new external call has a **CSP** directive in `vercel.json` and a fallback path
+- [ ] A new external call has a **CSP** directive in `netlify.toml` and a fallback path
       (E5).
 - [ ] If you touched the load or save path, sample data still cannot be seeded over real
       data (I11, in the spirit of `test/load-error.test.js`).
@@ -139,7 +140,7 @@ the club to come back to a dead app. [`.github/workflows/keepalive.yml`](../.git
 sends one anon REST read a day to prevent that.
 
 It needs two **repository secrets** (Settings → Secrets and variables → Actions):
-`SUPABASE_URL` and `SUPABASE_ANON_KEY` — the same values Vercel holds. Both are public by
+`SUPABASE_URL` and `SUPABASE_ANON_KEY` — the same values Netlify holds. Both are public by
 design (Vite inlines them into the bundle), so the secrets are tidiness, not protection.
 Without them the workflow fails immediately with a message saying so, rather than passing
 while pinging nothing.
@@ -156,18 +157,23 @@ reported as a failure, and the log distinguishes a 401 (wrong key) from a 5xx or
 
 ---
 
-## 6. Releasing (Vercel)
+## 6. Releasing (Netlify)
 
 1. Check that the schema is applied and public sign-ups are off.
-2. `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` are set in Vercel's environment
-   variables, ticked for **Production and Preview**. Vite inlines them **at build time**:
-   adding them afterwards requires a redeploy.
-3. Preview deploy → the manual checks below → merge.
+2. `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` are set under **Site configuration →
+   Environment variables**, for **all deploy contexts** so Deploy Previews get them too.
+   Vite inlines them **at build time**: adding them afterwards requires a redeploy.
+3. Deploy Preview → the manual checks below → merge.
+
+`netlify.toml` carries the build command, the publish directory, the `NODE_VERSION`, the
+SPA redirect and every security header. A host that serves the built `dist/` without it
+serves the app **unprotected and with broken deep links**, and nothing about the running
+app looks wrong — so treat that file as part of the release, not as configuration noise.
 
 **Manual checkpoints the automated tests do not cover:**
 
 - Sign in with a real account, and with a driver account too (only the driver tab shows).
-- Open the map picker on the preview deployment and **watch the browser console**. This is
+- Open the map picker on the Deploy Preview and **watch the browser console**. This is
   where a CSP conflict with Leaflet's styles would surface (ADR-21).
 - Run "matrix calculation" and read the message: it says whether the result came from OSRM
   or from an estimate.
@@ -179,7 +185,7 @@ reported as a failure, and the log distinguishes a 401 (wrong key) from a 5xx or
 
 | Symptom | Likely cause | Where to look |
 |---|---|---|
-| The "missing configuration" screen | no `.env`, or Vercel's variables were added after the build | `src/supabaseClient.js` |
+| The "missing configuration" screen | no `.env`, or Netlify's variables were added after the build | `src/supabaseClient.js` |
 | The "changed elsewhere" overlay | somebody else saved, or a genuine conflict after a lost response | `supabaseStorage.doSet` (ADR-06, ADR-07) |
 | Every save rejected, empty workspace | the workspace key does not match between client and schema | `supabase/migrations/README.md` |
 | The snapshot list is always empty | the history table is missing | the error branch in `RestorePanel` |

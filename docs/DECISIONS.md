@@ -195,6 +195,16 @@ by one browser tab.
 **Rejected.** A small Node or Python backend. It would buy validation and server-side
 computation, at the price of hosting, deployment and monitoring for a workload this size.
 
+**Amended, September 2026: the host is Netlify.** Everything above still holds — a static
+SPA on a CDN, Supabase behind it, all computation in the browser — and every consequence is
+unchanged. Only the provider moved. `netlify.toml` replaced `vercel.json` with the same SPA
+fallback and the same five headers, and no application code changed.
+
+That the swap cost one configuration file is the decision paying off rather than an
+accident: what ADR-09 actually chose was *a host that serves a built `dist/` and needs no
+operating*, never Vercel specifically. The title keeps the original name because that is
+what was decided at the time. Anything still naming Vercel is stale, not a second opinion.
+
 ## ADR-10 — Roles by e-mail, fail-closed
 
 **Context.** An admin should be able to grant roles without opening the Supabase
@@ -401,13 +411,13 @@ entered: by pin, or by pasting one.
 
 **Context.** A public app holding a club's data, with an anon key in the bundle.
 
-**Decision.** `vercel.json` lists exactly the origins used, and omits `'unsafe-inline'`.
+**Decision.** `netlify.toml` lists exactly the origins used, and omits `'unsafe-inline'`.
 
 **Consequence.** The built `index.html` must stay free of inline script and style. React
 and Leaflet set styles through the CSSOM, which CSP does not govern. Adding an external
 service requires a matching directive, or the browser blocks it silently.
 
-**Caveat.** Verify the Leaflet path on a preview deployment with the real headers. If it
+**Caveat.** Verify the Leaflet path on a Deploy Preview with the real headers. If it
 turns out to need it, adding `'unsafe-inline'` back to `style-src` is a one-line change.
 
 ## ADR-22 — An event-based seam between the app and the shell

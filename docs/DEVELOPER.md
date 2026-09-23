@@ -108,7 +108,7 @@ flat config (`npm run lint`). See [§19](#19-tests).
 ├── package.json              ← deps + scripts (dev / build / preview / test / lint)
 ├── vite.config.js            ← Vite config (React + Tailwind) and the vitest block
 ├── eslint.config.js          ← flat ESLint config (react + react-hooks)
-├── vercel.json               ← SPA rewrite for Vercel hosting
+├── netlify.toml              ← build, SPA redirect and security headers for Netlify
 ├── run-local.sh              ← one-command local setup (installs Node if needed)
 ├── .env.example              ← template for the two required env vars
 ├── .env                      ← your real Supabase keys (git-ignored)
@@ -1024,7 +1024,7 @@ persisted.
   fine for testing; for production you'd self-host OSRM or use a paid API. Without
   OSRM, the app falls back to straight-line estimates (clearly labelled in the UI).
 
-These services all work in the deployed (Vercel) app and in normal local dev. Inside
+These services all work in the deployed (Netlify) app and in normal local dev. Inside
 behind a restrictive CSP they may be blocked, which is exactly why every
 one of them has a fallback.
 
@@ -1070,15 +1070,16 @@ npm install && npm run dev
 Then open http://localhost:5173, log in with a user created in the Supabase
 dashboard, and the app loads (seeding sample data on the very first save).
 
-### Deploy to Vercel
+### Deploy to Netlify
 
-1. Import the repo into Vercel — the **Vite** preset is auto-detected (build
-   `npm run build`, output `dist`).
-2. Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` under **Settings →
-   Environment Variables** (Production **and** Preview). Both are browser-safe; RLS
+1. Import the repo into Netlify — `netlify.toml` already declares the build command
+   (`npm run build`), the publish directory (`dist`) and `NODE_VERSION`, so the
+   detected settings need no editing.
+2. Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` under **Site configuration →
+   Environment variables**, for **all deploy contexts**. Both are browser-safe; RLS
    protects the data.
-3. `vercel.json` adds an SPA catch-all rewrite so deep links / refreshes resolve to
-   the app.
+3. `netlify.toml` adds an SPA catch-all redirect (status 200) so deep links /
+   refreshes resolve to the app, plus the security headers.
 
 ---
 

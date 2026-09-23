@@ -13,8 +13,11 @@
 # reached PostgREST and Postgres. It deliberately adds NO new anon capability, which
 # an `anon`-executable ping() function would have done.
 #
-# WHY NOT VERCEL CRON. The app is a static SPA; vercel.json has no functions at all.
-# A Vercel cron would mean introducing a serverless function purely to hold this.
+# WHY NOT A NETLIFY SCHEDULED FUNCTION. Netlify can do this natively, but the app is a
+# purely static SPA — there is no functions directory and netlify.toml declares none.
+# Adopting the Functions runtime to hold one curl is a bigger change than this file,
+# and it would tie the keepalive to the host: a ping that lives in CI keeps working
+# through the next hosting move, which this project has now made once.
 
 name: Keepalive
 

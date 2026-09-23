@@ -134,28 +134,30 @@ fictional** — placeholder driver names and plates, with real public places as 
 and venues so the distances stay realistic. Replace it with your club's own data, or
 delete the rows from inside the app.
 
-## Deploying to Vercel
+## Deploying to Netlify
 
 Make sure the database is ready first: the schema applied and public sign-ups off.
 
-1. Import the repo. The **Vite** preset is detected automatically (build `npm run build`,
-   output `dist`), and Node comes from `engines` in `package.json`.
-2. Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` under **Settings → Environment
-   Variables**, ticking **Production _and_ Preview**. Both are browser-safe.
+1. Import the repo (**Add new site → Import an existing project**). Nothing needs filling
+   in by hand: `netlify.toml` supplies the build command (`npm run build`), the publish
+   directory (`dist`) and the Node version.
+2. Set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` under **Site configuration →
+   Environment variables**, available to **all deploy contexts** so Deploy Previews and
+   branch deploys get them too. Both are browser-safe.
 
    > Vite inlines these **at build time**. Adding them after a deployment has been built
    > will not affect that build — redeploy. A build without them still succeeds; the app
    > just shows its "missing configuration" screen.
-3. Push a branch for a preview deployment, check it, then merge.
+3. Push a branch for a Deploy Preview, check it, then merge.
 
-`vercel.json` adds the single-page-app rewrite and a set of security headers, including a
+`netlify.toml` adds the single-page-app redirect and a set of security headers, including a
 Content-Security-Policy that allows exactly the origins this app uses: Supabase, the OSRM
 matrix, Nominatim, OSM tiles, Leaflet from cdnjs, and Google Fonts. Add an external
 service and it needs a matching directive, or the browser will block it silently.
 
 The policy deliberately has no `'unsafe-inline'`. The built `index.html` contains no
 inline script or style, and React and Leaflet set styles through the CSSOM, which CSP
-does not govern. One caveat when checking a preview deployment: open the map picker and
+does not govern. One caveat when checking a Deploy Preview: open the map picker and
 watch the browser console. If Leaflet turns out to need it, adding `'unsafe-inline'` back
 to `style-src` is a one-line fix.
 
