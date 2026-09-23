@@ -4,8 +4,9 @@
    fülre el sem jut, és a tábla írását a szerver (RLS) is csak adminnak engedi. */
 
 import { useEffect, useState } from "react";
-import { Plus, AlertTriangle, RefreshCw } from "lucide-react";
+import { Plus, AlertTriangle, RefreshCw, Mail, Copy } from "lucide-react";
 import { listRoles, upsertRole, removeRole, isMissingRolesTable } from "../data/roles.js";
+import { createInvite, isAlreadyRegistered } from "../data/invites.js";
 import { isConfigured } from "../supabaseClient.js";
 import { Field, DangerBtn, EmptyState } from "../ui/base.jsx";
 
@@ -20,6 +21,9 @@ export function UsersPanel({ myEmail }) {
   const [newRole, setNewRole] = useState("sofor");
   const [busy, setBusy] = useState(false);
   const [tick, setTick] = useState(0);
+  const [mode, setMode] = useState("invite"); // invite | role
+  const [inviteLink, setInviteLink] = useState("");
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     if (!isConfigured) {
@@ -57,6 +61,57 @@ export function UsersPanel({ myEmail }) {
       setNewRole("sofor");
     } catch (e) { fail(e); }
     setBusy(false);
+  };
+
+  /* A meghívás hibái másfélék, mint a tábla-írásé: itt nem az RLS utasít vissza,
+     hanem a szerverfüggvény — és a leggyakoribb eset (a cím már regisztrált) nem is
+     hiba, hanem a másik mód. Ezért kap saját szöveget, a `fail` helyett. */
+  const failInvite = (e) => {
+    if (isAlreadyRegistered(e))
+      return setErrMsg("Ehhez a címhez már tartozik fiók, ezért nem kell meghívni. Válts a „Csak szerepkör” módra, és állítsd be a szerepkörét.");
+    const byCode = {
+      not_admin: "A szerver elutasította: meghívót csak admin készíthet.",
+      bad_email: "Ez nem érvényes e-mail-cím.",
+      bad_role: "Ismeretlen szerepkör.",
+      not_configured: "A szerveren hiányzik a meghívó funkció beállítása (SUPABASE_SERVICE_ROLE_KEY).",
+      no_site_url: "A szerveren nincs beállítva az oldal címe, így a meghívó link nem készíthető el.",
+      role_write_failed: "A fiók elkészült, de a szerepkört nem sikerült beállítani. Állítsd be a listában.",
+      NO_SESSION: "Lejárt a munkameneted. Lépj be újra.",
+      NETWORK: "A szerver nem érhető el. Ellenőrizd a kapcsolatot.",
+    };
+    if (byCode[e?.code]) return setErrMsg(byCode[e.code]);
+    // 404 és a nem-JSON válasz ugyanazt jelenti: nincs ott a funkció. Helyi `npm run
+    // dev` alatt ez a normális, mert a Netlify-funkciók csak a kitelepített appban futnak.
+    if (e?.code === "BAD_REPLY" || /^HTTP_/.test(e?.code || ""))
+      return setErrMsg("A meghívó funkció nem érhető el ezen a címen. Helyi futtatásnál ez normális — a kitelepített appban működik.");
+    setErrMsg("A meghívó készítése nem sikerült. Próbáld újra.");
+  };
+
+  const invite = async () => {
+    setBusy(true);
+    setErrMsg("");
+    setInviteLink("");
+    setCopied(false);
+    try {
+      const made = await createInvite(newEmail, newRole);
+      setInviteLink(made.link);
+      // A szerepkör sort a szerver írta meg, de a lista itt még a régit mutatja.
+      setRows((r) => [...r.filter((x) => x.email !== made.email), { email: made.email, role: made.role }]
+        .sort((a, b) => a.email.localeCompare(b.email)));
+      setNewEmail("");
+      setNewRole("sofor");
+    } catch (e) { failInvite(e); }
+    setBusy(false);
+  };
+
+  /* A vágólap API https nélkül és régebbi böngészőkben nincs meg, a link viszont
+     ilyenkor is ki van írva és kijelölhető — ezért a másolás elmaradása nem hiba,
+     csak nem vált át a felirat. */
+  const copyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(inviteLink);
+      setCopied(true);
+    } catch { /* marad a kijelölhető mező */ }
   };
 
   const changeRole = async (email, role) => {
@@ -145,9 +200,26 @@ export function UsersPanel({ myEmail }) {
           </div>
 
           <div className="card p-3">
-            <Field label="Új felhasználó e-mail-címe" hint="Ugyanaz a cím, amivel a Supabase-ben létrehoztad a fiókját (Authentication → Users).">
+            {/* Két külön feladat, ezért két mód. A meghívás fiókot is készít, a
+                szerepkör-adás viszont olyasvalakinek szól, aki már be tud lépni —
+                egy gombbal a kettő összemosva az „a cím már regisztrált” hibát adná
+                arra, ami valójában a helyes művelet. */}
+            <div className="seg mb-3">
+              <button className={mode === "invite" ? "on" : ""} onClick={() => { setMode("invite"); setErrMsg(""); }}>
+                Meghívás
+              </button>
+              <button className={mode === "role" ? "on" : ""} onClick={() => { setMode("role"); setErrMsg(""); setInviteLink(""); }}>
+                Csak szerepkör
+              </button>
+            </div>
+
+            <Field
+              label="E-mail-cím"
+              hint={mode === "invite"
+                ? "Erre a címre szól a meghívó. A fiók is elkészül — a Supabase-ben nem kell semmit csinálnod."
+                : "Olyan cím, amelyhez már tartozik fiók. Itt csak a szerepkörét állítod be."}>
               <input type="email" className="inp" value={newEmail} placeholder="valaki@klub.hu"
-                onChange={(e) => setNewEmail(e.target.value)} />
+                onChange={(e) => { setNewEmail(e.target.value); setInviteLink(""); }} />
             </Field>
             <Field label="Szerepkör">
               <select className="inp" value={newRole} onChange={(e) => setNewRole(e.target.value)}>
@@ -155,9 +227,34 @@ export function UsersPanel({ myEmail }) {
                 <option value="admin">Admin — mindent láthat és szerkeszthet</option>
               </select>
             </Field>
-            <button className="btn btn-pri" disabled={busy || !newEmail.trim()} onClick={add}>
-              <Plus size={17} /> Felvétel
-            </button>
+
+            {mode === "invite" ? (
+              <button className="btn btn-pri" disabled={busy || !newEmail.trim()} onClick={invite}>
+                <Mail size={17} /> {busy ? "Meghívó készítése…" : "Meghívó link készítése"}
+              </button>
+            ) : (
+              <button className="btn btn-pri" disabled={busy || !newEmail.trim()} onClick={add}>
+                <Plus size={17} /> Felvétel
+              </button>
+            )}
+
+            {inviteLink && (
+              <div className="banner banner-ok mt-3" style={{ display: "block" }}>
+                <div className="font-semibold mb-1">Kész a meghívó link</div>
+                <p className="text-sm mb-2" style={{ lineHeight: 1.5 }}>
+                  Küldd el annak, akit meghívtál — e-mailben, üzenetben, ahogy szoktad.
+                  A link <b>egyszer használható</b>, és <b>lejár</b>, ezért ha nem sikerül
+                  időben, készíts újat. A megnyitása után a felhasználó maga adja meg a jelszavát.
+                </p>
+                {/* readOnly input és nem sima szöveg: a link hosszú, és így egy
+                    koppintással kijelölhető ott is, ahol a vágólap API nem elérhető. */}
+                <input className="inp" readOnly value={inviteLink} aria-label="Meghívó link"
+                  onFocus={(e) => e.target.select()} style={{ fontSize: 13 }} />
+                <button className="btn btn-ghost mt-2" onClick={copyLink}>
+                  <Copy size={15} /> {copied ? "Kimásolva" : "Másolás"}
+                </button>
+              </div>
+            )}
           </div>
         </>
       )}

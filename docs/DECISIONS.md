@@ -40,6 +40,7 @@ Unless a record says otherwise, the decision is **still in force**.
 | [ADR-27](#adr-27--an-error-boundary-inside-the-shell) | Error boundary | resilience |
 | [ADR-28](#adr-28--one-stylesheet-os-driven-dark-mode) | One stylesheet | UI |
 | [ADR-29](#adr-29--empty-running-costs-money) | Empty running | optimisation |
+| [ADR-30](#adr-30--one-privileged-function-for-invitations) | Invitations | security |
 
 ---
 
@@ -204,6 +205,9 @@ That the swap cost one configuration file is the decision paying off rather than
 accident: what ADR-09 actually chose was *a host that serves a built `dist/` and needs no
 operating*, never Vercel specifically. The title keeps the original name because that is
 what was decided at the time. Anything still naming Vercel is stale, not a second opinion.
+
+**Narrowed by ADR-30.** "No backend" now has exactly one exception, and the reasoning for
+keeping it to one is in that entry.
 
 ## ADR-10 — Roles by e-mail, fail-closed
 
@@ -563,3 +567,47 @@ that down. The default of 100 HUF per minute is about 120 HUF per empty kilometr
 
 **Where.** `emptyRunMin`, `driverPay`, `homeTripMin`, `dayStats`, and the chaining edge
 cost in `optimizeDay`.
+
+## ADR-30 — One privileged function for invitations
+
+**Context.** Admins had to create every account by hand in the Supabase dashboard
+(Authentication → Users), then grant the role in the app: two systems, one of which the
+club's admins have no other reason to ever open. Creating an account, or generating a
+registration link, is an `auth.admin` call, and the whole admin namespace requires the
+**service_role** key — which bypasses row level security entirely and therefore can never
+be inlined into the browser bundle the way the anon key is.
+
+**Decision.** Exactly one server-side function, `netlify/functions/invite.mjs`, holding
+the service_role key in Netlify's environment. It verifies the caller's JWT with Supabase,
+confirms from `user_roles` that the caller is an admin, then calls
+`generateLink({ type: "invite" })` and returns a **single-use link**. The admin passes
+that link on through whatever channel they already use.
+
+**Consequence.** Public sign-ups stay **off**, so ADR-11 is untouched: the admin API
+creates accounts regardless of that setting, which is the whole reason this route was
+chosen over the obvious alternative. The app gains a set-password screen, reached through
+the `?invite=1` query parameter the link redirects to.
+
+**Why a link and not an e-mail.** Supabase's built-in mailer is rate limited to a handful
+of messages an hour and is explicitly not for production use. Returning the link makes
+delivery somebody else's problem — one the club already solves daily — instead of adding a
+dependency on SMTP that fails quietly and at the worst moment.
+
+**Why a query parameter for the marker.** supabase-js clears the URL hash as soon as it
+has read the tokens out of it, so a marker left in the hash is gone before any component
+can see it. The query parameter survives.
+
+**Rejected.** Enabling public sign-ups with an allowlist of invited addresses. No
+privileged key and no function — but the select policies are `to authenticated using
+(true)` and a user with no `user_roles` row is a driver (ADR-10), so anyone who read the
+public anon key out of the bundle could register and read the club's whole schedule. That
+is precisely the door the schema header tells you to close.
+
+**Rejected.** A Supabase Edge Function. It would keep the service_role key inside the
+vendor that issued it, which is genuinely tidier. But the project applies its schema by
+pasting SQL into the editor and has no Supabase CLI workflow at all, so an Edge Function
+adds a separate manual deploy step to a repository that otherwise ships on `git push` —
+a step that rots the first time somebody forgets it.
+
+**Where.** `netlify/functions/invite.mjs`, `src/data/invites.js`, the two-mode form in
+`UsersPanel`, and `SetPasswordScreen` in `AuthGate`.

@@ -23,6 +23,19 @@
   # tests; if that matrix changes, change this with it.
   NODE_VERSION = "22"
 
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+
+# MUST come before the SPA catch-all below. Netlify matches redirects in order and
+# takes the first hit, so with /* first every API call would come back as index.html
+# with status 200 — and the client would try to parse the HTML shell as JSON, failing
+# with a message about an unexpected "<" that says nothing about the real cause.
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/:splat"
+  status = 200
+
 # Single-page-app fallback: serve index.html for anything that is not a real file.
 # Deliberately NOT force = true — without it Netlify checks for a matching static
 # file first, so the hashed assets in dist/ are still served as themselves and only

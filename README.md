@@ -102,11 +102,17 @@ values (lower('you@example.com'), 'admin')
 on conflict (email) do update set role = 'admin';
 ```
 
-**4. Create the staff logins.** Add each person under **Authentication → Users → Add
-user**, set a password, and tick **Auto Confirm User**. No emails are sent. Then give
-them a role inside the app under **Adatok → Felhasználók** (no row means driver). For a
-driver, put the same address on their record under **Adatok → Sofőrök** so the driver tab
-opens on their own day plan.
+**4. Invite the staff from inside the app.** Under **Adatok → Felhasználók → Meghívás**,
+enter an address and a role and generate a **single-use registration link**, then send it
+to the person however you like — the app does not send email. They open it and choose
+their own password. This needs the deployed app, because it runs through the invite
+function (ADR-30); on a local dev server the panel says so.
+
+That replaces creating users by hand in the dashboard, which still works if you prefer it
+(**Authentication → Users → Add user**, with **Auto Confirm User** ticked) — grant the
+role afterwards with the panel's **Csak szerepkör** mode. Either way, for a driver put the
+same address on their record under **Adatok → Sofőrök** so the driver tab opens on their
+own day plan.
 
 More detail, including a query that tells you what is and is not applied, is in
 [`supabase/migrations/README.md`](supabase/migrations/README.md).
@@ -148,7 +154,16 @@ Make sure the database is ready first: the schema applied and public sign-ups of
    > Vite inlines these **at build time**. Adding them after a deployment has been built
    > will not affect that build — redeploy. A build without them still succeeds; the app
    > just shows its "missing configuration" screen.
-3. Push a branch for a Deploy Preview, check it, then merge.
+3. For the invite feature (ADR-30), add one more variable: **`SUPABASE_SERVICE_ROLE_KEY`**,
+   the `service_role` key from the same Supabase settings page.
+
+   > 🔴 This one is **secret**. It bypasses row level security completely. It goes in
+   > Netlify only — never in `.env`, never with a `VITE_` prefix, or it lands in the
+   > public bundle.
+4. In Supabase, under **Authentication → URL Configuration**, set the **Site URL** to your
+   Netlify address and add it to **Redirect URLs**. Invite links redirect back to
+   `/?invite=1`, and Supabase refuses to redirect anywhere not on that list.
+5. Push a branch for a Deploy Preview, check it, then merge.
 
 `netlify.toml` adds the single-page-app redirect and a set of security headers, including a
 Content-Security-Policy that allows exactly the origins this app uses: Supabase, the OSRM

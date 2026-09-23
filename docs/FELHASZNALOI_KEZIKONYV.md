@@ -673,10 +673,29 @@ Csak **admin** éri el: **Adatok → Felhasználók**.
 
 Itt döntöd el, ki mit érhet el.
 
-**Új felhasználó felvétele:**
-1. Írd be az **e-mail címét**. Ez ugyanaz legyen, amivel a fiókja létre lett hozva.
-2. Válaszd ki a **Szerepkört**: **Sofőr** vagy **Admin**.
-3. Kattints a **Felvétel** gombra.
+Az űrlap tetején két mód közül választhatsz. A különbség egyszerű: **van-e már fiókja**
+annak, akiről szó van.
+
+### Új ember meghívása (nincs még fiókja)
+
+1. Maradj a **Meghívás** módban.
+2. Írd be az **e-mail címét**, és válaszd ki a **Szerepkört** (**Sofőr** vagy **Admin**).
+3. Kattints a **Meghívó link készítése** gombra.
+4. Megjelenik egy **link**. A **Másolás** gombbal vedd ki, és küldd el az illetőnek –
+   e-mailben, üzenetben, ahogy szoktad. A program **nem küld levelet helyetted**.
+5. Aki megkapja, megnyitja a linket, és **maga adja meg a jelszavát**. Ezután már be tud lépni.
+
+> **Fontos a linkről:**
+> - **Egyszer használható**, és egy idő után **lejár**. Ha nem sikerült időben, készíts újat.
+> - Aki megkapja, be tud vele lépni – ezért úgy kezeld, mint egy jelszót. Ne tedd ki
+>   nyilvános helyre.
+
+### Szerepkör olyannak, akinek már van fiókja
+
+1. Válts a **Csak szerepkör** módra.
+2. Írd be az e-mail címét, válaszd ki a szerepkört, és kattints a **Felvétel** gombra.
+
+Ha meghívnál valakit, akinek már van fiókja, a program szól, hogy ezt a módot használd.
 
 **Szerepkör módosítása:** a felhasználó sorában válaszd ki az új szerepkört a legördülő listából.
 
@@ -685,8 +704,8 @@ Itt döntöd el, ki mit érhet el.
 > **Jó tudni:**
 > - A változás a felhasználó **következő belépésekor** vagy az oldal **újratöltésekor** lép életbe.
 > - **Saját magadat** nem tudod lefokozni vagy törölni – így nem zárhatod ki magad véletlenül.
-> - A felhasználói **fiókot** (e-mail + jelszó) a fejlesztő hozza létre. Itt csak a
->   jogosultságot állítod be.
+> - A **legelső** admint nem lehet innen felvenni (ehhez a listához is admin kell) – azt a
+>   fejlesztő állítja be egyszer, az induláskor.
 
 ---
 
