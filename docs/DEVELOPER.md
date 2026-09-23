@@ -109,6 +109,7 @@ flat config (`npm run lint`). See [§19](#19-tests).
 ├── vite.config.js            ← Vite config (React + Tailwind) and the vitest block
 ├── eslint.config.js          ← flat ESLint config (react + react-hooks)
 ├── netlify.toml              ← build, SPA redirect and security headers for Netlify
+├── netlify/functions/        ← the one piece of server code (invite links, ADR-30)
 ├── run-local.sh              ← one-command local setup (installs Node if needed)
 ├── .env.example              ← template for the two required env vars
 ├── .env                      ← your real Supabase keys (git-ignored)
@@ -1085,12 +1086,24 @@ dashboard, and the app loads (seeding sample data on the very first save).
 
 ## 16. Environment variables
 
-Only two, both read at build time by Vite and inlined into the browser bundle:
+Two are read at build time by Vite and inlined into the browser bundle:
 
 | Variable | What it is | Safe in the browser? |
 |---|---|---|
 | `VITE_SUPABASE_URL` | Your Supabase project URL. | Yes |
 | `VITE_SUPABASE_ANON_KEY` | The **publishable / anon** key. | **Yes** — it's designed to be public; RLS is the real protection. |
+
+One more is set **only in Netlify**, never in `.env`, and is read at runtime by the
+invite function (ADR-30) — never by the bundle:
+
+| Variable | What it is | Safe in the browser? |
+|---|---|---|
+| `SUPABASE_SERVICE_ROLE_KEY` | The **service_role** key, used by `netlify/functions/invite.mjs` to create accounts. | **NO — never.** It bypasses RLS entirely. |
+
+The function reads the project URL from `SUPABASE_URL` and falls back to
+`VITE_SUPABASE_URL`, so in practice the service_role key is the only variable this
+feature adds. `SITE_URL` may be set to override the redirect target; without it the
+function uses Netlify's own `URL`.
 
 > 🔴 **Never** put a Supabase **secret** key (`sb_secret_...` or the `service_role`
 > JWT) into any `VITE_*` variable, `.env` in this project, or the code. Anything

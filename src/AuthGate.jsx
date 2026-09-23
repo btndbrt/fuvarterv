@@ -173,6 +173,99 @@ function LoginScreen() {
   );
 }
 
+/* Az első belépés a meghívó linkkel: a fiók már létezik, de jelszava nincs.
+
+   A link visszatéréskor bejelentkezett munkamenetet hoz, tehát a felhasználó
+   technikailag "bent van" — csakhogy jelszó nélkül soha többé nem tudna belépni, ha
+   most továbbengednénk. Ezért ez a képernyő zárja az utat, amíg a jelszó meg nem
+   született.
+
+   A ?invite=1 QUERY paraméter jelzi az esetet, nem a hash: a supabase-js a hasht
+   azonnal kiüríti, amint kiszedte belőle a tokent, így az ott hagyott jelzés már
+   senkinek nem lenne olvasható. */
+function SetPasswordScreen({ onDone }) {
+  const [password, setPassword] = useState("");
+  const [again, setAgain] = useState("");
+  const [status, setStatus] = useState("idle"); // idle | saving | error
+  const [errorMsg, setErrorMsg] = useState("");
+
+  const submit = async (e) => {
+    e.preventDefault();
+    if (password.length < 8) {
+      setErrorMsg("A jelszó legyen legalább 8 karakter.");
+      setStatus("error");
+      return;
+    }
+    if (password !== again) {
+      setErrorMsg("A két jelszó nem egyezik.");
+      setStatus("error");
+      return;
+    }
+    setStatus("saving");
+    setErrorMsg("");
+    try {
+      const { error } = await supabase.auth.updateUser({ password });
+      if (error) {
+        setErrorMsg(loginErrorMessage(error));
+        setStatus("error");
+        return;
+      }
+      /* A paraméter eltakarítása, hogy egy frissítés ne kérje el újra a jelszót, és
+         hogy a meghívó link ne maradjon ott a címsorban megosztható állapotban. */
+      window.history.replaceState({}, "", window.location.pathname);
+      onDone();
+    } catch (err) {
+      setErrorMsg(loginErrorMessage(err));
+      setStatus("error");
+    }
+  };
+
+  return (
+    <div className="shell-screen">
+      <form className="shell-card shell-login" onSubmit={submit}>
+        <div className="shell-login-head">
+          <AppIcon />
+          <div>
+            <div className="shell-title">Válassz jelszót</div>
+            <div className="sub">Ezzel fogsz belépni mostantól</div>
+          </div>
+        </div>
+
+        <div className="shell-field">
+          <label className="shell-label" htmlFor="new-password">Új jelszó</label>
+          <input
+            id="new-password"
+            type="password"
+            autoComplete="new-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="shell-input"
+            required
+          />
+        </div>
+
+        <div className="shell-field">
+          <label className="shell-label" htmlFor="new-password-again">Jelszó még egyszer</label>
+          <input
+            id="new-password-again"
+            type="password"
+            autoComplete="new-password"
+            value={again}
+            onChange={(e) => setAgain(e.target.value)}
+            className="shell-input"
+            required
+          />
+        </div>
+
+        <button type="submit" className="shell-btn shell-btn-primary shell-btn-block" disabled={status === "saving"}>
+          {status === "saving" ? "Mentés…" : "Jelszó mentése"}
+        </button>
+        {status === "error" && <p className="shell-error" role="alert">{errorMsg}</p>}
+      </form>
+    </div>
+  );
+}
+
 // Blocking overlay: once the data changed elsewhere, saves can no longer
 // succeed, so we stop the user from editing (silently unsaved) — the only safe
 // action is to reload. This covers the whole app and captures clicks.
@@ -236,6 +329,11 @@ export default function AuthGate({ children }) {
   const [preflight, setPreflight] = useState("checking");
   const [retryTick, setRetryTick] = useState(0);
   const [showRestore, setShowRestore] = useState(false);
+  /* Egyszer, az első rendereléskor olvassuk ki. Effektben késő lenne: a képernyő
+     addigra eldőlt, és a jelszó nélküli felhasználó egy pillanatra bejutna. */
+  const [needsPassword, setNeedsPassword] = useState(
+    () => typeof window !== "undefined" && new URLSearchParams(window.location.search).get("invite") === "1",
+  );
 
   useEffect(() => {
     if (!isConfigured) {
@@ -347,6 +445,10 @@ export default function AuthGate({ children }) {
   }
 
   if (!session) return <LoginScreen />;
+
+  /* A preflight ELŐTT: a meghívott felhasználónak még nincs szerepköre és dolga az
+     adatokkal, egyedül a jelszavát kell megadnia. */
+  if (needsPassword) return <SetPasswordScreen onDone={() => setNeedsPassword(false)} />;
 
   if (preflight === "error") {
     return <LoadErrorScreen onRetry={() => setRetryTick((n) => n + 1)} />;

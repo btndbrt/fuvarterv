@@ -163,7 +163,14 @@ reported as a failure, and the log distinguishes a 401 (wrong key) from a 5xx or
 2. `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` are set under **Site configuration →
    Environment variables**, for **all deploy contexts** so Deploy Previews get them too.
    Vite inlines them **at build time**: adding them afterwards requires a redeploy.
-3. Deploy Preview → the manual checks below → merge.
+3. `SUPABASE_SERVICE_ROLE_KEY` is set in Netlify — **only** there, never in `.env` and
+   never `VITE_`-prefixed. Without it the Users panel reports that the invite function is
+   not configured; with it in the wrong place it is in the public bundle and the database
+   is open to anyone who looks (ADR-30).
+4. In Supabase, **Authentication → URL Configuration**: the Site URL and Redirect URLs
+   include the deployed address. Invite links come back to `/?invite=1` and Supabase will
+   not redirect to an address that is not listed.
+5. Deploy Preview → the manual checks below → merge.
 
 `netlify.toml` carries the build command, the publish directory, the `NODE_VERSION`, the
 SPA redirect and every security header. A host that serves the built `dist/` without it
@@ -178,6 +185,10 @@ app looks wrong — so treat that file as part of the release, not as configurat
 - Run "matrix calculation" and read the message: it says whether the result came from OSRM
   or from an estimate.
 - Save once, then open the snapshot panel. If it stays empty, the history table is missing.
+- **Adatok → Felhasználók → Meghívás**: make a link for a throwaway address and open it in a
+  private window. It must land on the "Válassz jelszót" screen, not on the login form. This
+  is the only check that exercises the function, the redirect allowlist and the
+  `?invite=1` marker together — and each of the three fails differently.
 
 ---
 
@@ -194,6 +205,8 @@ app looks wrong — so treat that file as part of the release, not as configurat
 | A "matrix is stale" flag | a coordinate changed since the matrix was computed | `matrixKey` |
 | Oddly short travel times | a point with no coordinate, falling back to `fallbackLegMin` | `legMin`, the coordinate requirement in `MasterForm` |
 | Optimisation prints a "heuristic" note | the search hit its 30,000-iteration cap | `assignResources` (`capped`) |
+| "A meghívó funkció nem érhető el" | running locally (`npm run dev` has no functions), or `/api/*` is matched after the SPA rule | `netlify.toml` redirect order |
+| Invite link opens the login form | the address is not in Supabase's Redirect URLs, so `?invite=1` was dropped | Authentication → URL Configuration |
 | An error card instead of a white screen | the `ErrorBoundary` caught a render error; the full stack is in the console | `src/ErrorBoundary.jsx` |
 
 Production builds ship sourcemaps, so a stack trace from a user's console points at real

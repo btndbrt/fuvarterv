@@ -39,4 +39,16 @@ export default [
     files: ["test/**", "*.config.js"],
     languageOptions: { globals: { ...globals.node, ...globals.browser } },
   },
+  {
+    /* Netlify functions are SERVER code and the only thing here that is not part of
+       the browser bundle: they read `process.env` for the service_role key and return
+       a web-standard `Response`. Linting them with the browser globals above is what
+       reported `process` as undefined — the environment differs, the code does not. */
+    files: ["netlify/functions/**/*.{js,mjs}"],
+    languageOptions: {
+      ecmaVersion: 2023,
+      sourceType: "module",
+      globals: { ...globals.node, ...globals.es2021, Request: "readonly", Response: "readonly" },
+    },
+  },
 ];
