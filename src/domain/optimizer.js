@@ -104,27 +104,51 @@ export function legRouteOrder(state, team, training, venueId, dir, stationIds) {
 export const teamRouteOrder = (state, team, venueId, dir, stationIds) =>
   legRouteOrder(state, team, null, venueId, dir, stationIds);
 
-/* Pack stops into as few buses as possible (first-fit-decreasing): each bus
-   carries at most `cap`, and a stop's whole headcount goes on ONE bus.
+/* Pack stops into as few buses as possible (first-fit-decreasing), each bus
+   carrying at most `cap`.
 
-   Returns null when there are no per-stop headcounts, or when a single stop alone
-   exceeds one bus — neither can be split this way. Within each returned bus the
-   stops keep the team's original order. */
-export function splitStationsByCapacity(stationIds, cnt, cap) {
-  const withCount = stationIds.map((id, i) => ({ id, i, c: cnt(id) })).filter((x) => x.c > 0);
-  if (!withCount.length || withCount.some((x) => x.c > cap)) return null;
-  const bins = [];
-  for (const s of [...withCount].sort((a, b) => b.c - a.c)) {
-    let b = bins.find((x) => x.load + s.c <= cap);
+   A stop bigger than one bus fills whole buses on its own, and only what is left
+   over is packed with the rest. It used to make the whole leg unsplittable: one
+   task nobody could carry, so the stops that would have fit went uncovered too.
+
+   Stops without a count ("not entered yet") are NOT dropped — they used to be, and
+   nobody picked those children up. They travel together on one bus, carrying the
+   `unknownPax` people the breakdown does not account for. With no such people to
+   carry they go wherever there is the most room.
+
+   Returns null when there are no per-stop headcounts at all. Otherwise a list of
+   buses as { pax, stops: [{ id, count }] }, count null for a stop without one;
+   within each bus the stops keep the team's original order. A bus may exceed `cap`
+   only when `unknownPax` alone does, and the caller has to say so. */
+export function splitStationsByCapacity(stationIds, cnt, cap, unknownPax = 0) {
+  const all = stationIds.map((id, i) => ({ id, i, c: cnt(id) }));
+  const known = all.filter((x) => x.c > 0), unknown = all.filter((x) => !(x.c > 0));
+  if (!known.length) return null;
+  const bins = [], items = [];
+  for (const s of known) {
+    let c = s.c;
+    for (; c > cap; c -= cap) bins.push({ items: [{ ...s, c: cap }], load: cap });
+    items.push({ ...s, c });
+  }
+  if (unknown.length) items.push({ group: unknown, c: Math.max(0, unknownPax) });
+  for (const s of items.sort((a, b) => b.c - a.c)) {
+    let b = s.c > 0
+      ? bins.find((x) => x.load + s.c <= cap)
+      : bins.reduce((m, x) => (!m || x.load < m.load ? x : m), null);
     if (!b) { b = { items: [], load: 0 }; bins.push(b); }
     b.items.push(s); b.load += s.c;
   }
-  return bins.map((b) => b.items.sort((a, z) => a.i - z.i).map((x) => x.id));
+  return bins.map((b) => ({
+    pax: b.load,
+    stops: b.items.flatMap((s) => (s.group ? s.group.map((u) => ({ ...u, c: null })) : [s]))
+      .sort((a, z) => a.i - z.i).map((x) => ({ id: x.id, count: x.c })),
+  }));
 }
 
 /* A day's tasks: an outbound and a return task per training occurrence. When a
    team is larger than the biggest vehicle, the task is split across buses by stop,
-   each one an independent parallel ride to the same venue. */
+   each one an independent parallel ride to the same venue; a stop larger than one
+   bus is itself shared between buses. */
 export function genDayTasks(state, weekday, weekMon) {
   const occs = weekOccurrences(state, weekMon).filter((o) => o.dayIdx === weekday);
   const tasks = [], skipped = [];
@@ -190,41 +214,61 @@ export function genDayTasks(state, weekday, weekMon) {
         continue;
       }
 
-      /* One direction's task over a subset of stops. idx = null means the whole
-         team on one bus; idx >= 1 is part idx of a task split across `count` buses. */
-      const mkTask = (subset, idx, count) => {
-        const order = legRouteOrder(state, team, t, t.venueId, dir, subset);
-        const split = idx != null;
+      /* One direction's task. bus = null means the whole team on one bus, with the
+         leg's own counts; otherwise it is bus idx of `count`, from
+         splitStationsByCapacity, and carries its own share of each stop — a stop
+         split across buses shows a different count on each. */
+      const mkTask = (bus, idx, count) => {
+        const split = bus != null;
+        const share = split ? Object.fromEntries(bus.stops.map((s) => [s.id, s.count || 0])) : null;
+        const n = split ? (sid) => share[sid] : cnt;
+        const order = legRouteOrder(state, team, t, t.venueId, dir, split ? bus.stops.map((s) => s.id) : st);
         const tag = split ? `#${idx}` : "";
         const name = `${teamLabel} · ${dirLabel}${split ? ` (${idx}/${count})` : ""}`;
         const base = {
           id: `${t.id}:${suffix}:${dir}${tag}`, dir, teamId: team.id, trainingId: t.id,
-          pax: split ? order.reduce((a, sid) => a + cnt(sid), 0) : pax, label: name,
-          breakdown: order.map((sid) => ({ stationId: sid, count: cnt(sid) })).filter((x) => x.count > 0),
+          pax: split ? bus.pax : pax, label: name,
+          breakdown: order.map((sid) => ({ stationId: sid, count: n(sid) })).filter((x) => x.count > 0),
         };
         if (dir === "oda") {
           const op = planOda(state, order, t.venueId, timeToMin(t.start) - N, dwell);
           return { ...base, from: order[0], to: t.venueId, start: op.start, end: op.end,
-            plan: op.stops.map((x) => ({ ...x, count: cnt(x.stationId) })), venueTime: op.venueArr };
+            plan: op.stops.map((x) => ({ ...x, count: n(x.stationId) })), venueTime: op.venueArr };
         }
         const vp = planVissza(state, order, t.venueId, timeToMin(t.end) + M, dwell);
         return { ...base, from: t.venueId, to: order[order.length - 1], start: vp.start, end: vp.end,
-          plan: vp.stops.map((x) => ({ ...x, count: cnt(x.stationId) })), venueTime: vp.venueDep };
+          plan: vp.stops.map((x) => ({ ...x, count: n(x.stationId) })), venueTime: vp.venueDep };
       };
 
-      const bins = maxSeats > 0 && pax > maxSeats ? splitStationsByCapacity(st, cnt, maxSeats) : null;
+      /* The people the breakdown does not place: pax falls back to the team total
+         when the per-stop counts add up to less. */
+      const counted = st.reduce((a, sid) => a + cnt(sid), 0);
+      const missing = Math.max(0, pax - counted);
+      const uncounted = st.filter((sid) => !(cnt(sid) > 0));
+      const bins = maxSeats > 0 && pax > maxSeats ? splitStationsByCapacity(st, cnt, maxSeats, missing) : null;
+      const orphans = `${who}: a megállónkénti létszámok összege (${counted} fő) kevesebb, mint a teljes létszám (${pax} fő), és nincs üresen hagyott megálló, ahová a maradék ${missing} fő tartozhatna`;
       if (bins && bins.length > 1) {
-        skipped.push(`${who}: a ${pax} fős létszám meghaladja a legnagyobb jármű férőhelyét (${maxSeats} fő), ezért ${bins.length} buszra bontva, megállónként.`);
-        bins.forEach((subset, k) => tasks.push(mkTask(subset, k + 1, bins.length)));
+        const splitStops = st.filter((sid) => cnt(sid) > maxSeats);
+        skipped.push(`${who}: a ${pax} fős létszám meghaladja a legnagyobb jármű férőhelyét (${maxSeats} fő), ezért ${bins.length} buszra bontva, megállónként.`
+          + (splitStops.length ? ` Több buszra osztott megálló: ${splitStops.map((sid) =>
+            `${locName(state, sid)} (${bins.map((b) => b.stops.find((s) => s.id === sid)?.count).filter(Boolean).join(" + ")} fő)`).join(", ")}.` : ""));
+        const names = `${uncounted.map((sid) => locName(state, sid)).join(", ")} ${uncounted.length > 1 ? "megállóknál" : "megállónál"}`;
+        if (uncounted.length && missing > maxSeats)
+          skipped.push(`${who}: ${names} nincs megadva létszám, és a rájuk eső ${missing} fő több, mint a legnagyobb jármű (${maxSeats} fő), ezért nem osztható buszokra — add meg a megállónkénti létszámokat.`);
+        else if (uncounted.length)
+          skipped.push(`${who}: ${names} nincs megadva létszám, ezért ${uncounted.length > 1 ? "ezek egy buszra kerültek" : "egy buszra került"}${missing ? ` a hiányzó ${missing} fővel` : ""} — add meg a megállónkénti létszámokat a pontos felosztáshoz.`);
+        else if (missing)
+          skipped.push(`${orphans}, ezért nekik nem jutott hely a buszokon — javítsd a létszámokat.`);
+        bins.forEach((bus, k) => tasks.push(mkTask(bus, k + 1, bins.length)));
       } else {
-        if (maxSeats > 0 && pax > maxSeats) {
-          const big = st.filter((sid) => cnt(sid) > maxSeats);
-          if (big.length)
-            skipped.push(`${who}: megállónként sem osztható — ${big.map((sid) => `${locName(state, sid)} (${cnt(sid)} fő)`).join(", ")} önmagában több, mint a legnagyobb jármű (${maxSeats} fő).`);
-          else if (!st.some((sid) => cnt(sid) > 0))
-            skipped.push(`${who}: a ${pax} fő meghaladja a legnagyobb jármű férőhelyét (${maxSeats} fő), de nincs megállónkénti létszámbontás, ezért nem osztható buszokra — add meg a megállónkénti létszámokat a felosztáshoz.`);
-        }
-        tasks.push(mkTask(st, null));
+        /* One bus is not a split. It happens when the counted stops fit one bus and
+           only people WITHOUT a stop push the total over, so the task keeps the full
+           total and stays uncovered rather than sending a bus too small for them. */
+        if (bins)
+          skipped.push(`${orphans}, ezért a ${pax} fős feladatra nincs elég nagy jármű — javítsd a létszámokat.`);
+        else if (maxSeats > 0 && pax > maxSeats)
+          skipped.push(`${who}: a ${pax} fő meghaladja a legnagyobb jármű férőhelyét (${maxSeats} fő), de nincs megállónkénti létszámbontás, ezért nem osztható buszokra — add meg a megállónkénti létszámokat a felosztáshoz.`);
+        tasks.push(mkTask(null));
       }
     }
   }

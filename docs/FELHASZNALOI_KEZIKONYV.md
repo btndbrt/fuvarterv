@@ -330,6 +330,13 @@ Ha a létszám több, mint a legnagyobb jármű férőhelye, a program **megáll
 osztja** a csapatot. Ehhez **meg kell adni a megállónkénti létszámokat** – enélkül nem tudja,
 kit melyik buszra tegyen, és ezt a Beosztás fül figyelmeztetésként jelzi.
 
+- Ha **egyetlen megállóban** többen vannak, mint ahány hely a legnagyobb járműben van, ennek a
+  megállónak a létszáma is **több busz között oszlik meg** (pl. 10 fő 8 fős buszokkal: 8 + 2). A
+  menetrendben minden busznál a saját része látszik.
+- Az **üresen hagyott** létszámú megállók nem maradnak ki: ezek **együtt egy buszra** kerülnek,
+  a csapat teljes létszámából hiányzó utasokkal számolva. Ezt a Beosztás fül figyelmeztetésként
+  jelzi – a pontos felosztáshoz töltsd ki ezeket is.
+
 ---
 
 ## 7. A heti beosztás elkészítése (Beosztás fül)
