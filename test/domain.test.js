@@ -132,35 +132,62 @@ describe("bestStationOrder matches brute force for n <= 7", () => {
 
 /* ------------------------------------------------------------------ */
 describe("splitStationsByCapacity", () => {
+  const ids = (bins) => bins.map((b) => b.stops.map((s) => s.id));
   test("known packing (first-fit-decreasing, original order within a bin)", () => {
     const counts = { a: 3, b: 3, c: 2 };
     const bins = splitStationsByCapacity(["a", "b", "c"], (id) => counts[id], 5);
-    expect(bins).toEqual([["a", "c"], ["b"]]);
+    expect(ids(bins)).toEqual([["a", "c"], ["b"]]);
+    expect(bins.map((b) => b.pax)).toEqual([5, 3]);
   });
-  test("returns null when a single stop exceeds capacity, or nothing to place", () => {
-    expect(splitStationsByCapacity(["a"], () => 6, 5)).toBeNull();
+  test("returns null only when there is no per-stop count at all", () => {
     expect(splitStationsByCapacity(["a", "b"], () => 0, 5)).toBeNull();
   });
-  test("property: every passenger placed once, no bin over capacity", () => {
+  test("a stop bigger than one bus fills whole buses, the rest is packed with the others", () => {
+    const counts = { a: 10, b: 3, c: 2 };
+    const bins = splitStationsByCapacity(["a", "b", "c"], (id) => counts[id], 8);
+    expect(bins).toEqual([
+      { pax: 8, stops: [{ id: "a", count: 8 }] },
+      { pax: 7, stops: [{ id: "a", count: 2 }, { id: "b", count: 3 }, { id: "c", count: 2 }] },
+    ]);
+    expect(ids(splitStationsByCapacity(["a"], () => 16, 8))).toEqual([["a"], ["a"]]);
+  });
+  test("stops without a count stay on a bus, together, carrying the unplaced people", () => {
+    const counts = { a: 5, b: 4 };
+    const bins = splitStationsByCapacity(["a", "x", "b", "y"], (id) => counts[id], 8, 3);
+    const withX = bins.find((b) => b.stops.some((s) => s.id === "x"));
+    expect(withX.stops.filter((s) => s.count === null).map((s) => s.id)).toEqual(["x", "y"]);
+    expect(withX.pax).toBe(withX.stops.reduce((a, s) => a + (s.count || 0), 0) + 3);
+    expect(bins.reduce((a, b) => a + b.pax, 0)).toBe(12);
+    // Nobody unplaced: they still get visited, on the emptiest bus.
+    const none = splitStationsByCapacity(["a", "x", "b"], (id) => ({ a: 7, b: 4 })[id], 8);
+    expect(none.find((b) => b.stops.some((s) => s.id === "x")).pax).toBe(4);
+  });
+  test("property: every passenger placed, no bin over capacity", () => {
     const rng = mulberry32(7);
     for (let trial = 0; trial < 200; trial++) {
       const n = 1 + Math.floor(rng() * 6);
       const cap = 4 + Math.floor(rng() * 5);
       const ids = Array.from({ length: n }, (_, i) => `s${i}`);
       const counts = {};
-      for (const id of ids) counts[id] = Math.floor(rng() * (cap + 2)); // may exceed cap
-      const bins = splitStationsByCapacity(ids, (id) => counts[id], cap);
+      for (const id of ids) counts[id] = Math.floor(rng() * (2 * cap + 2)); // may exceed cap
+      const unknownPax = Math.floor(rng() * (cap + 1));
+      const bins = splitStationsByCapacity(ids, (id) => counts[id], cap, unknownPax);
       const withCount = ids.filter((id) => counts[id] > 0);
-      if (withCount.some((id) => counts[id] > cap) || withCount.length === 0) {
+      if (withCount.length === 0) {
         expect(bins).toBeNull();
         continue;
       }
-      const flat = bins.flat();
-      // each counted stop placed exactly once
-      expect(flat.slice().sort()).toEqual(withCount.slice().sort());
-      // no bin over capacity
+      // each stop's buses add up to its headcount; an uncounted stop is on exactly one bus
+      for (const id of ids) {
+        const on = bins.flatMap((b) => b.stops.filter((s) => s.id === id));
+        if (counts[id] > 0) expect(on.reduce((a, s) => a + s.count, 0)).toBe(counts[id]);
+        else expect(on.map((s) => s.count)).toEqual([null]);
+      }
+      const unplaced = ids.some((id) => !(counts[id] > 0)) ? unknownPax : 0;
+      expect(bins.reduce((a, b) => a + b.pax, 0)).toBe(withCount.reduce((a, id) => a + counts[id], 0) + unplaced);
       for (const b of bins) {
-        expect(b.reduce((a, id) => a + counts[id], 0)).toBeLessThanOrEqual(cap);
+        expect(b.pax).toBeLessThanOrEqual(cap);
+        expect(new Set(b.stops.map((s) => s.id)).size).toBe(b.stops.length);
       }
     }
   });
