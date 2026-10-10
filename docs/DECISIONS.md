@@ -42,6 +42,7 @@ Unless a record says otherwise, the decision is **still in force**.
 | [ADR-29](#adr-29--empty-running-costs-money) | Empty running | optimisation |
 | [ADR-30](#adr-30--one-privileged-function-for-invitations) | Invitations | security |
 | [ADR-31](#adr-31--fixed-driverbus-pairing-is-a-switch-not-a-bigger-bias) | Fixed pairing | optimisation |
+| [ADR-32](#adr-32--a-vehicles-depot-can-depend-on-the-day-and-the-time) | Time-dependent depot | optimisation |
 
 ---
 
@@ -300,6 +301,9 @@ money, which is what keeps a pointless one off the plan.
 through `groupByShift`: the driver's sheet, the schedule's chain cards, and the
 empty-running charge. The schedule screen once derived its depot times per chain
 instead, and drew a bus arriving at the depot after it had already left again.
+
+**Amended by ADR-32.** "Depot to depot" may now be two depots: the one the bus leaves
+and the one it returns to, each resolved at its own moment.
 
 ## ADR-15 — Hard constraints, and exactly one soft term
 
@@ -662,3 +666,67 @@ per-driver flag would simply default to the club setting.
 `logic.js`; `assignResources`, `pairingIssue`, `contentionReasons` and the skeleton merge in
 `optimizeDay`; the ⚙ panel in `ScheduleScreen`. Tests: `fixed-vehicle.test.js`,
 `fixed-vehicle-ui.test.jsx`.
+
+## ADR-32 — A vehicle's depot can depend on the day and the time
+
+**Context.** A vehicle had one depot (`baseId`, else the club's), and everything priced
+from it — depot runs, paid time (ADR-14), empty running (ADR-29), the chaining stage's
+"could the driver get home" — assumed the bus left from and returned to that one place.
+A dispatcher's real cases broke that: one driver works at an office until 16:10
+Monday to Thursday, so the bus starts from the office on those days, but on Friday he
+finishes at 13:30 and goes home first. Another works until 16:00 every day: a 16:10
+departure leaves from the workplace, a 17:00 one from home.
+
+**Decision.** The rule lives on the **vehicle**, as a list of weekly windows shaped like
+a driver's availability: `baseRules: [{ days, start, end, baseId }]`. A window is
+half-open, the first match wins, and with no match the depot is `baseId`, then
+`settings.defaultBaseId`. The start depot is resolved when the bus **leaves**, the end
+depot when it **gets back**, and the two may differ.
+
+**The circularity, and how it is broken.** The departure time depends on the depot (a
+far depot means leaving earlier) and the depot depends on the departure time. The start
+depot is the one valid at the **latest** moment from which a bus leaving the then-valid
+depot still reaches the first pickup on time; the end depot, mirrored, is the one valid
+at the **earliest** moment the bus can be back. Cutting the day into stretches with a
+constant depot makes each stretch's answer a closed form, so this is exact and
+deterministic — no iteration, no tie left to chance (E2). It also handles the case a
+naive "look up the rule at the departure time" gets wrong: "until 16:00" with a 16:10
+departure. At 16:10 the rule says home, but leaving home on time meant setting off at
+15:40, while the bus was still at the office; the latest feasible departure is the
+office's, which is what the dispatcher described.
+
+**Why on the vehicle.** For the same reason the single depot is (DEVELOPER §7): it is
+the bus's whereabouts that decide the empty running. A rule on the driver would need a
+second resolution when two drivers share a bus, and would say nothing about a bus
+nobody is paired with.
+
+**Consequence.** One resolver feeds every view: `depotLegs` calls `startBaseOf` and
+`endBaseOf`, and `spanOf`, `driverPay`, `emptyRunMin`, `groupByShift`, the chain card,
+the driver sheet and the print sheet all read through it. `homeTripMin` resolves the
+same two ends for the gap between two tasks, so chaining and pay still agree on "could
+the driver get home". Tasks and uses now carry `weekday`, the one input the old single
+depot never needed. `deleteGuard` counts a depot named only in a rule.
+
+**The model trusts the rules.** It does not check that the bus could physically have
+got from where the last shift ended to where the next one starts: the Friday driver
+moving the bus home on his own time is exactly what the rules exist to describe.
+
+**Old data (E8).** `ensureShape` fills `baseRules: []`, and with no rules every
+resolution is `baseOf`'s — the four existing depot test files pass unchanged. A use with
+no `weekday` (any caller written before this) also gets the fallback. An older client
+ignores the field and plans with the all-day depot, which is the behaviour it always
+had.
+
+**Rejected.** A per-date override ("on 12 March the bus is at X"). Useful for one-offs,
+but the dispatcher's cases are weekly patterns, and dated exceptions are their own
+feature (matches). Weekly windows can gain a dated layer later without changing these.
+
+**Rejected.** Resolving both ends at the task times rather than at the depot departure
+and arrival. Simpler, since there is no circularity, but it answers a different question
+from the one the dispatcher asks: "for a 16:10 departure, where does the bus leave
+from?" is about when the bus leaves.
+
+**Where.** `baseAt`, `startBaseOf`, `endBaseOf`, `hasAnyBase` in `logic.js`; `depotLegs`,
+`spanOf`, `homeTripMin`, `chainUse`, `rideUse` and `genDayTasks` (`task.weekday`) in
+`optimizer.js`; the window editor in `MasterScreen` (`WindowList`, shared with driver
+availability). Tests: `base-rules.test.js`, `base-rules-ui.test.jsx`.

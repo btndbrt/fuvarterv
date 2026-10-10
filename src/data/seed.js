@@ -35,9 +35,13 @@ export function ensureShape(s) {
   /* Depot: where the bus spends the night. Settable per vehicle, because a driver
      often keeps theirs at home; null means the club depot (settings.defaultBaseId).
      With neither set, paid time is measured from the tasks, so existing data behaves
-     exactly as it did before depots existed. */
+     exactly as it did before depots existed.
+
+     baseRules: time windows in which the bus is kept somewhere else (the driver's
+     workplace until 16:00, say). Empty means the single depot above all day, which is
+     how every vehicle saved before the rules existed behaves. */
   s.bases = (s.bases || []).map((x) => ({ ...x, lat: x.lat ?? null, lon: x.lon ?? null }));
-  s.vehicles = (s.vehicles || []).map((v) => ({ ...v, seats: Number(v.seats) || 0, plate: v.plate || "", hasVignette: !!v.hasVignette, baseId: v.baseId ?? null }));
+  s.vehicles = (s.vehicles || []).map((v) => ({ ...v, seats: Number(v.seats) || 0, plate: v.plate || "", hasVignette: !!v.hasVignette, baseId: v.baseId ?? null, baseRules: Array.isArray(v.baseRules) ? v.baseRules : [] }));
   /* email: the driver's sign-in address, lower-cased. A user with the driver role
      opens on their own day plan, matched on this. */
   s.drivers = (s.drivers || []).map((d) => ({ ...d, wage: d.wage ?? 3000, minShiftMin: d.minShiftMin ?? 180, availability: d.availability || [], preferredVehicleId: d.preferredVehicleId ?? null, email: d.email || "" }));
@@ -111,13 +115,13 @@ export function seedState() {
       { id: "vBAL", name: "Balástya terem", address: "Iskola tornaterme, Balástya", note: "", lat: 46.4262, lon: 20.0046 },
     ],
     vehicles: [
-      { id: "b1", name: "Kisbusz 1", plate: "ABC-101", seats: 8, hasVignette: true, note: "Országos engedély" },
-      { id: "b2", name: "Kisbusz 2", plate: "ABC-102", seats: 8, hasVignette: false, note: "Megyei engedély" },
-      { id: "b3", name: "Kisbusz 3", plate: "ABC-103", seats: 8, hasVignette: false, note: "Megyei engedély" },
-      { id: "b4", name: "Kisbusz 4", plate: "ABC-104", seats: 8, hasVignette: true, note: "Országos engedély" },
-      { id: "b5", name: "Kisbusz 5", plate: "ABC-105", seats: 8, hasVignette: true, note: "Országos engedély" },
-      { id: "b6", name: "Kisbusz 6", plate: "ABC-106", seats: 8, hasVignette: true, note: "Országos engedély" },
-      { id: "b7", name: "Kisbusz 7", plate: "ABC-107", seats: 8, hasVignette: false, note: "Megyei engedély" },
+      { id: "b1", name: "Kisbusz 1", plate: "ABC-101", seats: 8, hasVignette: true, note: "Országos engedély", baseRules: [] },
+      { id: "b2", name: "Kisbusz 2", plate: "ABC-102", seats: 8, hasVignette: false, note: "Megyei engedély", baseRules: [] },
+      { id: "b3", name: "Kisbusz 3", plate: "ABC-103", seats: 8, hasVignette: false, note: "Megyei engedély", baseRules: [] },
+      { id: "b4", name: "Kisbusz 4", plate: "ABC-104", seats: 8, hasVignette: true, note: "Országos engedély", baseRules: [] },
+      { id: "b5", name: "Kisbusz 5", plate: "ABC-105", seats: 8, hasVignette: true, note: "Országos engedély", baseRules: [] },
+      { id: "b6", name: "Kisbusz 6", plate: "ABC-106", seats: 8, hasVignette: true, note: "Országos engedély", baseRules: [] },
+      { id: "b7", name: "Kisbusz 7", plate: "ABC-107", seats: 8, hasVignette: false, note: "Megyei engedély", baseRules: [] },
     ],
     drivers: [
       { id: "d1", name: "Sofőr 1", phone: "", note: "Állandó busz: ABC-101", wage: 3000, minShiftMin: 180, availability: [], preferredVehicleId: "b1" },

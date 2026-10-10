@@ -473,11 +473,25 @@ station (coordinate mandatory in the editor), but never selectable as a stop.
 ```js
 { id, name, plate, seats, note,
   hasVignette: boolean,                  // national motorway vignette
-  baseId: id|null }                      // null = settings.defaultBaseId
+  baseId: id|null,                       // null = settings.defaultBaseId
+  baseRules: [                           // empty = baseId all day (the default)
+    { days: [weekdayIdx, ...], start: "HH:MM", end: "HH:MM", baseId: id }
+  ] }
 ```
 `plate` is normalized; `seats` excludes the driver. The base is on the **vehicle**,
 not the driver, because a driver often keeps the bus at their home address and it is
 the bus's whereabouts that decides the deadhead.
+
+`baseRules` says where the bus is kept at a given weekday and time, when that is not
+always the same place — at the driver's office until 16:00, at home afterwards. The
+windows are shaped like a driver's availability, half-open (`[start, end)`), and the
+first matching one wins. With no match the depot is `baseId`, then
+`settings.defaultBaseId`. **Never resolve a depot by hand**: `baseAt(state,
+vehicleId, weekday, min)` answers "where is the bus at this moment", and
+`startBaseOf(state, use)` / `endBaseOf(state, use)` in `logic.js` answer "which depot
+does this occupancy leave from / return to" (see
+[§10.5](#105-assign-real-drivers-and-buses--assignresources)). `baseOf` is now only the
+fallback, used when no rule applies.
 
 **Driver** (`drivers[]`)
 ```js
@@ -675,7 +689,8 @@ To detect clashes, each ride is reduced to a **time window** it occupies:
 
 `deleteGuard(state, kind, id)` returns a Hungarian "in use" message (or `null` if
 safe to delete). E.g. you can't quietly delete a station that teams or rides still
-reference. The UI uses this to warn before deletion.
+reference. The UI uses this to warn before deletion. A depot counts as referenced by a
+vehicle's `baseId`, by any of its `baseRules`, and by `settings.defaultBaseId`.
 
 ---
 
@@ -790,7 +805,9 @@ This is modelled as **minimum-cost flow on a bipartite graph**:
   depot round trip the bus would otherwise make in the gap. `homeTripMin` measures that
   round trip against the depots of the buses that could actually run both tasks, not
   against `defaultBaseId` alone, so this stage and `spanOf` cannot answer "could the
-  driver get home" differently.
+  driver get home" differently. With `baseRules` the trip home may touch two depots:
+  back to the one valid when the bus arrives after A, out of the one valid when it
+  leaves for B (each task carries its `weekday` for this).
 - When the driver could *not* have got home, the gap is paid either way, so it is not
   charged against the chain and no depot trip is saved.
 - The solver (`minCostChains`, successive shortest paths / SPFA) only pushes flow
@@ -836,8 +853,8 @@ locked.
 The cost of an option is the **increase in that driver's cost for the whole day**,
 not a figure computed for the chain alone:
 ```
-span(chain)  = [chain.start − legMin(base → first stop),
-                chain.end   + legMin(last stop → base)]   // paid door to door
+span(chain)  = [chain.start − legMin(startBase → first stop),
+                chain.end   + legMin(last stop → endBase)] // paid door to door
 shifts       = overlapping spans of that driver merged into one
 cost         = per shift: calloutFee + max(shift length, minShiftMin)/60 × wage
              + emptyRunMin × runCostPerMin                 // ADR-29
@@ -857,6 +874,28 @@ callouts and the true 8.7-hour shift with 140 minutes of on-site waiting.
 
 With no depot known (`settings.defaultBaseId` and `vehicle.baseId` both null), the
 span is the chain's own start/end, which is exactly the pre-depot behaviour.
+
+**Start and end depot.** `startBase` and `endBase` are the same depot unless the
+vehicle has `baseRules`, and are resolved by `startBaseOf` / `endBaseOf` (used by
+`depotLegs`, and so by `spanOf`, `driverPay`, `emptyRunMin`, `groupByShift`, the chain
+cards, the driver sheet and the print sheet). The start depot is resolved at the moment
+the bus **leaves** it, the end depot at the moment it **gets back**. Both moments
+depend on the depot (the run from a far depot leaves earlier), so the resolution is:
+
+- **start:** the depot valid at the **latest** moment `t` from which a bus leaving the
+  depot valid at `t` still reaches the first pickup on time. The bus then leaves it at
+  `pickup − run`.
+- **end:** the depot valid at the **earliest** moment `t` at which the bus can be back
+  at the depot valid at `t`, having left the last drop-off at the occupancy's end.
+
+The day is cut into stretches over which the depot is constant, so each stretch's best
+`t` is a closed form and the result is deterministic. Usually the departure lies inside
+the chosen depot's window. When the window closed before the bus had to leave, and the
+next depot is too far to make it in time, the bus leaves from where it was when the
+window closed: "works until 16:00" and a 16:10 departure means the office, because
+leaving home on time would have meant setting off at 15:40, while the bus was still at
+the office. A use with no `weekday` gets the fallback depot, so callers that predate
+the rules behave exactly as before.
 
 **Preferred-vehicle bias (soft preference).** On top of `base`, if the driver has a
 `preferredVehicleId` and this vehicle is a *different* one, we add
@@ -1071,7 +1110,7 @@ one of them has a fallback.
 | `preferredBias` | Extra cost (Ft) charged when a driver is put on a bus other than their preferred one. 0 disables the preference. | 1000 |
 | `fixedVehicle` | `true` makes `preferredVehicleId` a hard rule: a driver who has one is only ever offered that bus. Locks still override it. `false` keeps it a soft preference priced by `preferredBias` (ADR-31). | false |
 | `runCostPerMin` | Cost (Ft) of one minute of **empty** running: fuel and wear on a bus carrying nobody. Charged on depot trips and deadheads, and what stops the optimizer driving the bus home between two runs. 0 makes empty mileage free again. | 100 |
-| `defaultBaseId` | The club's depot — where buses without a `baseId` of their own start and end the day. `null` means no depot is known, and paid time falls back to spanning the tasks only. | null |
+| `defaultBaseId` | The club's depot — where buses without a `baseId` of their own (and outside their `baseRules` windows) start and end the day. `null` means no depot is known, and paid time falls back to spanning the tasks only. | null |
 
 ---
 

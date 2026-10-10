@@ -9,7 +9,7 @@ import { DAYS, uid, byId } from "../domain/constants.js";
 import { mondayOf, weekdayIdx, minToTime, fmtDateFull, toISO } from "../domain/datetime.js";
 import { locName, matrixKey, computeMatrix } from "../domain/geo.js";
 import { resolveDay, dayStats, optimizeWeek, pairingIssue, withGeneratedRides, handRidesReplaced, driverAvailableFor, driverPay, chainUse, depotLegs, chainShifts } from "../domain/optimizer.js";
-import { baseOf } from "../domain/logic.js";
+import { hasAnyBase } from "../domain/logic.js";
 import { fmtFt, fmtH } from "../ui/format.js";
 import { Field, NumField, Check, Modal, PlateChip, TeamDot, EmptyState, InfoDot, BusyOverlay } from "../ui/base.jsx";
 import { VignettePill } from "../ui/VignettePill.jsx";
@@ -163,7 +163,7 @@ export function ChainCard({ state, chain: c, place, onLock, onMove, onToggleChai
             on site, never a trip home. Drawing the depot legs per chain put the bus
             back at the depot in the middle of the afternoon, with times that
             overlapped the trip it was still making. */}
-        {legs && first && <DepotLine state={state} leg={legs.out} kind="out" />}
+        {legs?.out && first && <DepotLine state={state} leg={legs.out} kind="out" />}
         {gap && (
           <div className="linkline" title="A busz a helyszínen marad — nincs idő hazamenni">
             <ChevronsRight size={13} />
@@ -186,7 +186,7 @@ export function ChainCard({ state, chain: c, place, onLock, onMove, onToggleChai
             )}
           </div>
         ))}
-        {legs && last && <DepotLine state={state} leg={legs.back} kind="back" />}
+        {legs?.back && last && <DepotLine state={state} leg={legs.back} kind="back" />}
       </div>
     </div>
   );
@@ -472,8 +472,10 @@ export function ScheduleScreen({ state, update }) {
   const setSetting = (k, v) => update((s) => ({ ...s, settings: { ...s.settings, [k]: v } }));
 
   const moveChainId = moveTask ? (res.chains.find((c) => c.tasks.some((t) => t.id === moveTask.id))?.id || null) : null;
-  /* Vehicles with no resolvable depot: neither their own nor the club's. */
-  const baseless = state.vehicles.filter((v) => !baseOf(state, v.id));
+  /* Vehicles with no depot at any time: neither their own, nor the club's, nor one in
+     a time window. A vehicle with windows but no all-day depot has none outside its
+     windows; that is a choice the editor makes visible, not a missing setting. */
+  const baseless = state.vehicles.filter((v) => !hasAnyBase(state, v));
 
   /* Every STANDING warning about the day, gathered into one collapsible list so the
      chains start at the top of the screen instead of below a stack of banners.

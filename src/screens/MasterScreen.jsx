@@ -51,7 +51,7 @@ export function MasterScreen({ tab, state, update, notice, setNotice }) {
                       : <AlertTriangle size={14} style={{ color: "var(--warn)" }} aria-label="Hiányzó koordináta" />}</>}
               </div>
               <div className="text-sm" style={{ color: "var(--ink2)" }}>
-                {tab === "vehicles" && `${it.seats} férőhely (sofőr nélkül)`}
+                {tab === "vehicles" && `${it.seats} férőhely (sofőr nélkül)${(it.baseRules || []).length ? ` · ${it.baseRules.length} időszakos telephely` : ""}`}
                 {tab === "drivers" && <>{it.phone ? <a href={`tel:${it.phone.replace(/\s/g, "")}`} className="underline">{it.phone}</a> : "nincs telefonszám"}{it.email ? ` · ${it.email}` : ""}</>}
                 {(tab === "stations" || tab === "venues" || tab === "bases") && (it.address || "nincs cím")}
                 {it.note ? ` · ${it.note}` : ""}
@@ -73,12 +73,55 @@ export function MasterScreen({ tab, state, update, notice, setNotice }) {
   );
 }
 
+/* A list of weekly time windows: day chips, a from–to pair, and a delete button per
+   row. Shared by a driver's availability and a vehicle's depot windows, which have the
+   same shape on purpose so one editor and one mental model serve both. `extra` renders
+   whatever else a row carries (the vehicle's depot picker); `blank` is a new row.
+
+   Module level, not inside MasterForm: a component defined in a render function is a
+   new type on every render, and its inputs would lose focus on each keystroke. */
+function WindowList({ items, onChange, blank, addLabel, extra }) {
+  const set = (i, patch) => onChange(items.map((x, j) => (j === i ? { ...x, ...patch } : x)));
+  return (
+    <div className="flex flex-col gap-2">
+      {items.map((w, i) => (
+        <div key={i} className="card p-2">
+          <div className="flex gap-1 flex-wrap mb-2">
+            {DAYS_SHORT.map((d, di) => (
+              <button key={di} className={`chip ${(w.days || []).includes(di) ? "on" : ""}`} style={{ padding: "4px 10px", minHeight: 32 }}
+                onClick={() => set(i, { days: (w.days || []).includes(di) ? w.days.filter((x) => x !== di) : [...(w.days || []), di].sort((a, b) => a - b) })}>{d}</button>
+            ))}
+          </div>
+          <div className="flex gap-2 items-center">
+            <input type="time" className="inp" style={{ minHeight: 38, padding: "6px 8px" }} value={w.start}
+              onChange={(e) => set(i, { start: e.target.value })} />
+            <span>–</span>
+            <input type="time" className="inp" style={{ minHeight: 38, padding: "6px 8px" }} value={w.end}
+              onChange={(e) => set(i, { end: e.target.value })} />
+            <button className="iconbtn" style={{ width: 34, height: 34 }} aria-label="Idősáv törlése"
+              onClick={() => onChange(items.filter((_, j) => j !== i))}><X size={15} /></button>
+          </div>
+          {extra && <div className="mt-2">{extra(w, (patch) => set(i, patch))}</div>}
+        </div>
+      ))}
+      <button className="btn btn-ghost" onClick={() => onChange([...items, blank()])}>
+        <Plus size={15} /> {addLabel}
+      </button>
+    </div>
+  );
+}
+
+/* A window is kept on save only when it is complete. A half-filled one would
+   otherwise be stored, ignored by the scheduler, and look to the user as if it
+   applied. */
+const completeWindow = (w) => (w.days || []).length && w.start && w.end;
+
 export function MasterForm({ kind, state, entity, onSave, onCancel }) {
   const blank = {
     stations: { name: "", address: "", note: "", lat: null, lon: null },
     venues: { name: "", address: "", note: "", lat: null, lon: null, needsVignette: false },
     bases: { name: "", address: "", note: "", lat: null, lon: null },
-    vehicles: { name: "", plate: "", seats: 8, note: "", hasVignette: false },
+    vehicles: { name: "", plate: "", seats: 8, note: "", hasVignette: false, baseRules: [] },
     drivers: { name: "", phone: "", email: "", note: "", wage: 3000, minShiftMin: 180, availability: [] },
   }[kind];
   const [f, setF] = useState(entity || blank);
@@ -101,7 +144,8 @@ export function MasterForm({ kind, state, entity, onSave, onCancel }) {
       const p = normalizePlate(f.plate);
       if (!p) { setPlateErr("A rendszám kötelező."); return; }
       if (plateExists(state, p, entity?.id)) { setPlateErr(`Ez a rendszám már létezik: ${p}`); return; }
-      onSave({ ...f, plate: p, seats: Math.max(1, Number(f.seats) || 1), hasVignette: !!f.hasVignette, baseId: f.baseId || null });
+      onSave({ ...f, plate: p, seats: Math.max(1, Number(f.seats) || 1), hasVignette: !!f.hasVignette, baseId: f.baseId || null,
+        baseRules: (f.baseRules || []).filter((w) => completeWindow(w) && w.baseId && w.end > w.start) });
       return;
     }
     if (kind === "drivers") {
@@ -110,7 +154,7 @@ export function MasterForm({ kind, state, entity, onSave, onCancel }) {
         email: (f.email || "").trim().toLowerCase(),
         wage: Math.max(0, Number(f.wage) || 0),
         minShiftMin: Math.max(0, Number(f.minShiftMin) || 0),
-        availability: (f.availability || []).filter((w) => (w.days || []).length && w.start && w.end),
+        availability: (f.availability || []).filter(completeWindow),
       });
       return;
     }
@@ -165,6 +209,22 @@ export function MasterForm({ kind, state, entity, onSave, onCancel }) {
               {state.bases.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
             </select>
           </Field>
+          <Field label="Időszakos telephely"
+            hint="Ha a busz bizonyos napokon, bizonyos időben máshol áll (pl. a sofőr munkahelyén 16:00-ig), add meg itt. A kiállás annál a telephelynél kezdődik, amelyik az induláskor érvényes, a beállás annál ér véget, amelyik a visszaérkezéskor. Idősávon kívül a fenti telephely számít.">
+            {state.bases.length === 0 ? (
+              <div className="text-sm" style={{ color: "var(--ink2)" }}>Előbb vegyél fel telephelyet az Adatok → Telephelyek fülön.</div>
+            ) : (
+              <WindowList items={f.baseRules || []} onChange={(baseRules) => setF({ ...f, baseRules })}
+                addLabel="Időszakos telephely hozzáadása"
+                blank={() => ({ days: [], start: "00:00", end: "16:00", baseId: state.bases[0].id })}
+                extra={(w, set) => (
+                  <select className="inp" aria-label="Telephely ebben az idősávban" value={w.baseId || ""}
+                    onChange={(e) => set({ baseId: e.target.value || null })}>
+                    {state.bases.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                  </select>
+                )} />
+            )}
+          </Field>
         </>
       )}
       {kind === "drivers" && (
@@ -189,33 +249,8 @@ export function MasterForm({ kind, state, entity, onSave, onCancel }) {
             </Field>
           </div>
           <Field label="Elérhetőség" hint="Ha nincs idősáv megadva, a sofőr bármikor beosztható.">
-            <div className="flex flex-col gap-2">
-              {(f.availability || []).map((w, i) => (
-                <div key={i} className="card p-2">
-                  <div className="flex gap-1 flex-wrap mb-2">
-                    {DAYS_SHORT.map((d, di) => (
-                      <button key={di} className={`chip ${(w.days || []).includes(di) ? "on" : ""}`} style={{ padding: "4px 10px", minHeight: 32 }}
-                        onClick={() => {
-                          const days = (w.days || []).includes(di) ? w.days.filter((x) => x !== di) : [...(w.days || []), di].sort((a, b) => a - b);
-                          setF({ ...f, availability: f.availability.map((x, j) => (j === i ? { ...x, days } : x)) });
-                        }}>{d}</button>
-                    ))}
-                  </div>
-                  <div className="flex gap-2 items-center">
-                    <input type="time" className="inp" style={{ minHeight: 38, padding: "6px 8px" }} value={w.start}
-                      onChange={(e) => setF({ ...f, availability: f.availability.map((x, j) => (j === i ? { ...x, start: e.target.value } : x)) })} />
-                    <span>–</span>
-                    <input type="time" className="inp" style={{ minHeight: 38, padding: "6px 8px" }} value={w.end}
-                      onChange={(e) => setF({ ...f, availability: f.availability.map((x, j) => (j === i ? { ...x, end: e.target.value } : x)) })} />
-                    <button className="iconbtn" style={{ width: 34, height: 34 }} aria-label="Idősáv törlése"
-                      onClick={() => setF({ ...f, availability: f.availability.filter((_, j) => j !== i) })}><X size={15} /></button>
-                  </div>
-                </div>
-              ))}
-              <button className="btn btn-ghost" onClick={() => setF({ ...f, availability: [...(f.availability || []), { days: [], start: "15:00", end: "21:00" }] })}>
-                <Plus size={15} /> Idősáv hozzáadása
-              </button>
-            </div>
+            <WindowList items={f.availability || []} onChange={(availability) => setF({ ...f, availability })}
+              addLabel="Idősáv hozzáadása" blank={() => ({ days: [], start: "15:00", end: "21:00" })} />
           </Field>
         </>
       )}
