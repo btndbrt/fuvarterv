@@ -21,6 +21,10 @@ export const DEFAULT_SETTINGS = {
   estSpeedKmh: 50,      // km/h: used for straight-line travel time estimates
   fallbackLegMin: 12,   // min: deadhead when there is neither a matrix nor coordinates
   preferredBias: 1000,  // HUF: penalty when a driver is put on a bus other than their usual one (0 disables it)
+  /* true turns preferredVehicleId from a preference into a rule: a driver who has
+     one is only ever offered that bus. false (the default, and what every older blob
+     reads as) keeps it soft, priced by preferredBias above. */
+  fixedVehicle: false,
   /* How hard the optimizer pushes work off an over-loaded driver and onto an
      under-loaded one. Measured in paid minutes against each driver's availability-
      weighted share, and priced in the same forint-ish units as preferredBias, so the

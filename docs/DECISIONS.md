@@ -41,6 +41,7 @@ Unless a record says otherwise, the decision is **still in force**.
 | [ADR-28](#adr-28--one-stylesheet-os-driven-dark-mode) | One stylesheet | UI |
 | [ADR-29](#adr-29--empty-running-costs-money) | Empty running | optimisation |
 | [ADR-30](#adr-30--one-privileged-function-for-invitations) | Invitations | security |
+| [ADR-31](#adr-31--fixed-driverbus-pairing-is-a-switch-not-a-bigger-bias) | Fixed pairing | optimisation |
 
 ---
 
@@ -314,6 +315,9 @@ correct by hand. Keeping the soft terms to one keeps the cost function readable.
 **The golden rule.** A soft term must also go into `skelCost`. Leave it out and the
 improvement loop compares a biased cost against an unbiased one, and the displayed daily
 cost can go **up** after optimising. That actually happened.
+
+**Amended by ADR-31.** The preferred vehicle can now also be switched to a hard
+constraint. The bias stays the one soft term; the switch adds a filter, not a weight.
 
 ## ADR-16 — Capacity splitting by stop (first-fit-decreasing)
 
@@ -611,3 +615,50 @@ a step that rots the first time somebody forgets it.
 
 **Where.** `netlify/functions/invite.mjs`, `src/data/invites.js`, the two-mode form in
 `UsersPanel`, and `SetPasswordScreen` in `AuthGate`.
+
+## ADR-31 — Fixed driver–bus pairing is a switch, not a bigger bias
+
+**Context.** A club dispatcher reported that the optimizer kept swapping buses between
+drivers. Many drivers keep "their" bus at home and answer for it, so a plan that hands it
+to somebody else is one the dispatcher has to undo by hand. `preferredVehicleId` was only
+ever a soft penalty (ADR-15): any saving larger than `preferredBias` moved a driver.
+
+**Decision.** A boolean setting, `fixedVehicle` (default `false`). When on, a driver who
+has a `preferredVehicleId` is **only ever offered that vehicle**: a filter in
+`assignResources` next to capacity and the vignette, via `vehicleAllowedFor` /
+`fixedVehicleOf` in `logic.js`. Drivers without a preferred bus are unaffected. Two drivers
+may share one bus (shift partners) — nothing in the rule is exclusive, and the ordinary
+double-booking check keeps them off it at the same time. A preferred bus that no longer
+exists pins nothing, matching how the bias already treats it.
+
+**Locks win.** A locked task or chain keeps whatever driver and bus it was given, so a
+manual move remains the way to make an exception. The improvement loop will not graft
+free work onto a locked chain that breaks the pairing, or the exception would quietly
+spread to tasks nobody locked.
+
+**Explanations (ADR-24).** The plain feasibility checks look at drivers and buses
+separately, which is no longer enough: every available driver can be pinned to an
+unsuitable bus while the suitable bus has nobody allowed to drive it. `pairingIssue`
+names each driver, their bus and what is wrong with it, and is shared by `optimizeDay`
+and the Schedule screen's `taskHardIssues` so the two cannot drift (risk R6).
+`contentionReasons` adds the permitted pairs when a feasible task loses out on time.
+
+**Consequence.** Old data behaves exactly as before (E8): the key is absent, `ensureShape`
+fills `false`, and an older client that does not know the key ignores it. With the switch
+on the search space shrinks, so optimising gets faster, not slower. The skeleton-cost
+golden rule (ADR-15) is unaffected because this is a filter, not a cost term.
+
+**Rejected.** Raising `preferredBias` to a huge number. It would mostly work, but "mostly"
+is the problem: a large enough saving still wins, the number has to be re-tuned whenever
+wages or the call-out fee change, and an uncovered task would carry no reason because
+from the search's point of view nothing was forbidden.
+
+**Rejected.** A per-driver "fixed" flag. More flexible, but the dispatcher's request was
+club-wide, and a per-driver flag doubles the number of states a reader of the schedule has
+to keep in mind. It can be added later without changing the data already stored: a
+per-driver flag would simply default to the club setting.
+
+**Where.** `DEFAULT_SETTINGS.fixedVehicle`, `fixedVehicleOf` and `vehicleAllowedFor` in
+`logic.js`; `assignResources`, `pairingIssue`, `contentionReasons` and the skeleton merge in
+`optimizeDay`; the ⚙ panel in `ScheduleScreen`. Tests: `fixed-vehicle.test.js`,
+`fixed-vehicle-ui.test.jsx`.

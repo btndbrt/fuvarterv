@@ -12,7 +12,7 @@
 import { DAYS, byId, uid } from "./constants.js";
 import { timeToMin, minToTime } from "./datetime.js";
 import { legMin, locName } from "./geo.js";
-import { weekOccurrences, legFor, legSource, taskNeedsVignette, chainNeedsVignette, vignetteVenues, baseOf, rideWindow } from "./logic.js";
+import { weekOccurrences, legFor, legSource, taskNeedsVignette, chainNeedsVignette, vignetteVenues, baseOf, rideWindow, fixedVehicleOf, vehicleAllowedFor } from "./logic.js";
 
 /* Held-Karp: the shortest order that visits every station.
    pre/post pin a point before/after the chain (typically the venue);
@@ -775,6 +775,10 @@ export function assignResources(state, weekday, freeChains, fixedUse, fairness =
       for (const v of state.vehicles) {
         if (v.seats < c.maxPax) continue;
         if (needsV && !v.hasVignette) continue;
+        /* Fixed pairing (settings.fixedVehicle) is hard too: a driver with a
+           preferred bus is not offered any other. Off, this lets everything through
+           and the soft bias below does the steering, exactly as before. */
+        if (!vehicleAllowedFor(state, d, v.id)) continue;
         if (used.some((u) => u.vehicleId === v.id && resourceClash(state, u, c))) continue;
         /* A chain's price is the INCREMENT to that driver's cost for the day. If
            it attaches to a shift they already have (because they cannot go home in
@@ -819,12 +823,53 @@ export function assignResources(state, weekday, freeChains, fixedUse, fairness =
   return { picks: best ? best.picks : [], cost: best ? best.cost : (chains.length ? 1e9 : 0), capped };
 }
 
+/* Why no driver may take this task under the fixed pairing, or null.
+
+   The plain checks (a big enough bus exists, some driver is available) look at
+   drivers and buses separately. With the pairing on that is no longer enough: every
+   available driver may be pinned to a bus that is too small or lacks the vignette,
+   while the bus that would fit has nobody allowed to drive it. Null whenever the
+   pairing is off, whenever a usable pair exists, and whenever a plain check already
+   fails — that case has its own sentence, and repeating it here would only confuse.
+
+   Shared by optimizeDay's feasibility pass and the Schedule screen's reason list, so
+   the two cannot drift apart the way the vignette reason once did (risk R6). */
+export function pairingIssue(state, weekday, t) {
+  if (!state.settings?.fixedVehicle) return null;
+  const needsV = taskNeedsVignette(state, t);
+  const fits = (v) => v && v.seats >= t.pax && (!needsV || v.hasVignette);
+  const av = state.drivers.filter((d) => driverAvailableFor(d, weekday, t.start, t.end));
+  const okV = state.vehicles.filter(fits);
+  if (!av.length || !okV.length) return null;
+  if (av.some((d) => okV.some((v) => vehicleAllowedFor(state, d, v.id)))) return null;
+  const why = av.map((d) => {
+    const v = byId(state.vehicles, fixedVehicleOf(state, d));
+    const what = v.seats < t.pax ? `${v.seats} férőhely, ${t.pax} fő kellene` : "nincs országos matricája";
+    return `${d.name} → ${v.plate} (${what})`;
+  });
+  return `Fix sofőr–jármű párosítás: ${DAYS[weekday]} ${minToTime(t.start)}–${minToTime(t.end)} között minden elérhető sofőr csak a saját buszát vezetheti, és egyik sem alkalmas: ${why.join(", ")}. `
+    + "Párosítás nélküli sofőr nincs, aki egy alkalmas járművet vihetne. Kapcsold ki a fix párosítást a ⚙ panelben, vagy helyezd át kézzel a feladatot.";
+}
+
 export function contentionReasons(state, weekday, t) {
   const av = state.drivers.filter((d) => driverAvailableFor(d, weekday, t.start, t.end));
   const needsV = taskNeedsVignette(state, t);
   const bigV = state.vehicles.filter((v) => v.seats >= t.pax && (!needsV || v.hasVignette));
   const what = needsV ? "elegendő férőhelyű, országos matricás jármű" : "elegendő férőhelyű jármű";
-  return [`Erőforrás-ütközés: ${DAYS[weekday]} ${minToTime(t.start)}–${minToTime(t.end)} között minden alkalmas erőforrás foglalt (elérhető sofőr: ${av.length}, ${what}: ${bigV.length}).`];
+  const out = [`Erőforrás-ütközés: ${DAYS[weekday]} ${minToTime(t.start)}–${minToTime(t.end)} között minden alkalmas erőforrás foglalt (elérhető sofőr: ${av.length}, ${what}: ${bigV.length}).`];
+  /* With the fixed pairing on, "a free driver and a free bus" is not enough: they
+     have to be a permitted pair. Without this sentence the counts above can read as
+     "two drivers and two buses, so why not?" when both drivers share the one bus. */
+  const pinned = av.filter((d) => fixedVehicleOf(state, d));
+  if (pinned.length) {
+    const pairs = pinned
+      .map((d) => ({ d, v: byId(state.vehicles, fixedVehicleOf(state, d)) }))
+      .filter(({ v }) => bigV.includes(v))
+      .map(({ d, v }) => `${d.name} – ${v.plate}`);
+    out.push(`Fix sofőr–jármű párosítás: ${pinned.length} elérhető sofőr csak a saját buszát vezetheti. `
+      + `Alkalmas párok: ${pairs.length ? pairs.join(", ") : "nincs"}; párosítás nélküli elérhető sofőr: ${av.length - pinned.length}.`);
+  }
+  return out;
 }
 
 /* Resolve the saved schedule into a view model, with live clash detection. */
@@ -1183,6 +1228,8 @@ export function optimizeDay(state, weekday, weekMon, fairness = null) {
       reasons.push(`Nincs országos matricás jármű ${t.pax} fővel: ${vignetteVenues(state, { tasks: [t] }).join(", ")} csak matricás autóval érhető el.`);
     if (!state.drivers.some((d) => driverAvailableFor(d, weekday, t.start, t.end)))
       reasons.push(`Egyik sofőr sem érhető el ${DAYS[weekday]} ${minToTime(t.start)}–${minToTime(t.end)} között.`);
+    const pairing = pairingIssue(state, weekday, t);
+    if (pairing) reasons.push(pairing);
     if (reasons.length) uncovered.push({ task: t, reasons });
     else free.push(t);
   }
@@ -1288,6 +1335,11 @@ export function optimizeDay(state, weekday, weekMon, fairness = null) {
           /* A skeleton chain's vehicle is fixed, so it cannot acquire a vignette:
              a task that needs one may only be appended to a bus that has one. */
           if (chainNeedsVignette(state, F) && !v.hasVignette) continue;
+          /* A locked chain may put a paired driver on a foreign bus: that is how a
+             manual exception is made. Grafting free work onto it would extend the
+             exception to tasks nobody locked, so with the fixed pairing on only a
+             skeleton that respects the pairing may grow. */
+          if (!vehicleAllowedFor(state, d, v.id)) continue;
           const trialS = skl.map((c, x) => (x === k ? mkChain(state, [...c.tasks, ...F.tasks], c) : c));
           const trialF = fre.filter((_, x) => x !== i);
           const t = evalPlan(trialS, trialF);

@@ -488,7 +488,8 @@ the bus's whereabouts that decides the deadhead.
   availability: [                        // empty array = available any time
     { days: [weekdayIdx, ...], start: "HH:MM", end: "HH:MM" }
   ],
-  preferredVehicleId: id|null,           // the driver's usual bus (soft preference)
+  preferredVehicleId: id|null,           // the driver's usual bus (soft preference;
+                                         // a hard rule with settings.fixedVehicle)
 }
 ```
 
@@ -818,10 +819,19 @@ For each chain it enumerates valid (driver, vehicle) options, requiring:
   contain the shift.
 - **No double-booking:** neither the driver nor the vehicle already overlaps another
   chain in time.
+- **Fixed pairing (only with `settings.fixedVehicle`):** a driver with a
+  `preferredVehicleId` is only offered that vehicle (`vehicleAllowedFor` /
+  `fixedVehicleOf` in `logic.js`). Drivers without one are unaffected, and two
+  drivers may share one bus — the double-booking check is what keeps them off it at
+  the same time. A preferred vehicle that no longer exists pins nothing. Off (the
+  default), every bus is offered and only the soft bias below steers.
 
 A **locked** task still wins over all of this: its chain keeps the driver and vehicle
 the admin picked (§10.7), and the local-improvement step will not graft a
-vignette-requiring task onto a locked chain whose bus lacks one.
+vignette-requiring task onto a locked chain whose bus lacks one. Nor, with the fixed
+pairing on, onto a locked chain that puts a paired driver on a foreign bus: that
+chain is a manual exception, and grafting would extend the exception to work nobody
+locked.
 
 The cost of an option is the **increase in that driver's cost for the whole day**,
 not a figure computed for the chain alone:
@@ -860,7 +870,8 @@ opts.push({ d, v, cost: base + bias });
 
 This nudges the optimizer to keep each driver on their usual bus, but it is **soft**:
 coverage always wins, and a real saving larger than the bias can still move a driver
-off their bus. Set `preferredBias` to 0 to disable it. If a driver's preferred
+off their bus. Set `preferredBias` to 0 to disable it, or turn on
+`settings.fixedVehicle` to make the preference a hard rule (above) instead. If a driver's preferred
 vehicle no longer exists, every option gets the same penalty, so it cancels out and
 behaves as "no preference." Note the bias affects only the optimizer's internal
 choice; the **displayed** cost (`dayStats`) is always the true money cost.
@@ -881,6 +892,12 @@ get optimized, which the average-wage flow stage couldn't see.
   forced into a bad assignment. It is returned in `uncovered` with an exact,
   human-readable reason (e.g. "no vehicle with enough seats", "no driver available in
   this window", or "all suitable resources are busy at this time").
+- With the fixed pairing on, a task can fail even though a big enough bus and an
+  available driver both exist — every available driver is pinned to an unsuitable
+  bus. `pairingIssue(state, weekday, task)` names each driver, their bus and what is
+  wrong with it; `optimizeDay`'s feasibility pass and the Schedule screen's
+  `taskHardIssues` both call it. When the task is feasible but loses out on
+  contention, `contentionReasons` adds a sentence listing the permitted pairs.
 
 ### 10.8 Output and stats
 
@@ -1052,6 +1069,7 @@ one of them has a fallback.
 | `estSpeedKmh` | Assumed speed for straight-line travel-time estimates. | 50 |
 | `fallbackLegMin` | Travel time used when there's no matrix and no coordinates. | 12 |
 | `preferredBias` | Extra cost (Ft) charged when a driver is put on a bus other than their preferred one. 0 disables the preference. | 1000 |
+| `fixedVehicle` | `true` makes `preferredVehicleId` a hard rule: a driver who has one is only ever offered that bus. Locks still override it. `false` keeps it a soft preference priced by `preferredBias` (ADR-31). | false |
 | `runCostPerMin` | Cost (Ft) of one minute of **empty** running: fuel and wear on a bus carrying nobody. Charged on depot trips and deadheads, and what stops the optimizer driving the bus home between two runs. 0 makes empty mileage free again. | 100 |
 | `defaultBaseId` | The club's depot — where buses without a `baseId` of their own start and end the day. `null` means no depot is known, and paid time falls back to spanning the tasks only. | null |
 

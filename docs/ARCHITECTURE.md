@@ -333,6 +333,7 @@ fixing one.
 | I7c | Empty running is charged wherever cost is | `emptyRunMin` inside `driverPay` | `depot-return.test.js` |
 | I7d | Every ride of one chain is one shift | `runId` + `groupByShift` | `depot-return.test.js` |
 | I8 | Only a vignette-carrying vehicle may serve a vignette-only venue (a hard constraint) | `assignResources`, `optimizeDay` | `vignette.test.js` |
+| I8b | With `fixedVehicle` on, an unlocked chain never puts a paired driver on another bus | `vehicleAllowedFor` in `assignResources` and the skeleton merge | `fixed-vehicle.test.js` |
 | I9 | A station, venue or depot cannot be saved without a coordinate | `MasterForm` | `master-coord.test.jsx` |
 | I10 | Referenced master data cannot be deleted | `deleteGuard`, `chainRefs` | `fixes.test.js` |
 | I11 | Sample data is never seeded over real data after a read failure | `isNotFound`, preflight | `load-error.test.js` |
@@ -427,7 +428,9 @@ chains, accepting a trial only when the whole plan's cost **strictly** decreases
 
 There is exactly one soft constraint: the **preferred-vehicle bias**, a forint penalty for
 putting a driver on a bus other than their usual one. Everything else — capacity,
-availability, the vignette, physical reachability — is hard.
+availability, the vignette, physical reachability — is hard. The `fixedVehicle` setting
+turns the preferred vehicle into a hard constraint as well (ADR-31); the bias then still
+exists but no longer decides anything for a driver who has a bus.
 
 The golden rule when adding either: a hard constraint needs a filter in `assignResources`
 **and** a pre-filter in `optimizeDay`'s feasibility pass, with a reason (E7). A soft one
