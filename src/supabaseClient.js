@@ -3,12 +3,16 @@ import { createClient } from "@supabase/supabase-js";
 const url = import.meta.env.VITE_SUPABASE_URL;
 const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
+// Local test mode (`npm run dev:local`) runs on a snapshot file and must never reach
+// the live project, even when .env holds its real credentials.
+const localMode = import.meta.env.MODE === "offline";
+
 // True only when both env vars are present. When false we avoid calling
 // createClient (which throws on missing config), so AuthGate can show a helpful
 // message instead of a blank screen.
-export const isConfigured = Boolean(url && anonKey);
+export const isConfigured = !localMode && Boolean(url && anonKey);
 
-if (!isConfigured) {
+if (!isConfigured && !localMode) {
   console.error(
     "Missing Supabase configuration: set VITE_SUPABASE_URL and " +
       "VITE_SUPABASE_ANON_KEY in your .env file (see .env.example).",

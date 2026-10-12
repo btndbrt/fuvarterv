@@ -127,9 +127,26 @@ npm run dev               # http://localhost:5173
 
 Or in one step, installing Node if you do not have it: `./run-local.sh`.
 
+### Local test mode, on a copy of the live data
+
+`npm run dev:local` runs the app with **no Supabase at all**, on a snapshot of the live
+data, so nothing you do can reach the club's real data:
+
+1. In the Supabase SQL editor, run
+   `select data from app_state where id = 'fuvarterv:v1';`, copy the result as JSON,
+   and save it as `local-data/state.json`. That folder is gitignored, because the
+   snapshot holds real names and phone numbers.
+2. `npm run dev:local`, then open http://127.0.0.1:5173. There's no login, you are an
+   admin, and an orange **HELYI TESZT** bar stays on top.
+3. Changes are saved to this browser's localStorage only. **Újratöltés a fájlból**
+   starts over from the file; **Munkapéldány letöltése** downloads the working copy.
+
+See `local-data/README.md` for details.
+
 | Command | What it does |
 |---|---|
 | `npm run dev` | Vite dev server |
+| `npm run dev:local` | local test mode on `local-data/state.json`, no Supabase |
 | `npm test` | Vitest, single run |
 | `npm run lint` | ESLint |
 | `npm run build` | production build into `dist/` |
