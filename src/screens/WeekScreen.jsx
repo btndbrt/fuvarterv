@@ -37,6 +37,7 @@ export function WeekScreen({ state, openRide }) {
         <EmptyState>Ezen a héten nincs edzés. Új edzést a <b>Csapatok</b> fülön, a csapat adatlapján vehetsz fel.</EmptyState>
       )}
 
+      <div className="week-days">
       {days.map((d) => (
         <section key={d.di} className="mb-4">
           <div className="flex items-baseline gap-2 mb-2 px-1">
@@ -49,6 +50,7 @@ export function WeekScreen({ state, openRide }) {
           </div>
         </section>
       ))}
+      </div>
     </div>
   );
 }

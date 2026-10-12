@@ -41,7 +41,7 @@ export function MasterScreen({ tab, state, update, notice, setNotice }) {
       {notice && <div className="banner banner-warn mb-3"><AlertTriangle size={18} />{notice}</div>}
       {(tab === "vehicles" || tab === "drivers" || tab === "bases") && <DepotMigrationBanner state={state} update={update} />}
 
-      <div className="flex flex-col gap-2">
+      <div className="flex flex-col gap-2 card-list">
         {items.map((it) => (
           <div key={it.id} className="card p-3 flex items-center gap-3">
             <div className="flex-1 min-w-0">

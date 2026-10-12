@@ -594,10 +594,12 @@ export function ScheduleScreen({ state, update }) {
       </p>
       {msg && <div className="banner banner-warn mb-3"><Table size={16} />{msg}</div>}
 
-      {res.chains.map((c) => (
-        <ChainCard key={c.id} state={state} chain={c} place={places.get(c)} onLock={toggleLock} onMove={setMoveTask}
-          onToggleChainLock={() => toggleChainLock(c.id)} />
-      ))}
+      <div className="chain-grid">
+        {res.chains.map((c) => (
+          <ChainCard key={c.id} state={state} chain={c} place={places.get(c)} onLock={toggleLock} onMove={setMoveTask}
+            onToggleChainLock={() => toggleChainLock(c.id)} />
+        ))}
+      </div>
       {res.chains.length === 0 && res.tasks.length > 0 && (
         <EmptyState>Ezen a napon még nincs beosztás. Futtasd a heti optimalizálást, vagy helyezz át feladatot kézzel.</EmptyState>
       )}

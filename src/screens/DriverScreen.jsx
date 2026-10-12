@@ -133,7 +133,7 @@ export function DriverScreen({ state, myEmail }) {
   const driver = byId(state.drivers, driverId);
 
   return (
-    <div className="px-4 pb-4">
+    <div className="px-4 pb-4 narrow">
       <div className="py-3 flex items-center gap-1"><h2 className="disp text-xl">Sofőr nézet</h2><InfoDot align="l" text="Egy sofőr napi fuvarjai, nyomtatható formában. Fent válts sofőrt és napot." /></div>
 
       <div className="flex gap-2 overflow-x-auto pb-2 mb-2">

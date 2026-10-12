@@ -1084,6 +1084,26 @@ outside the app proper (login, the error boundary, the restore panel, the save-f
 toast), and everything else for the application itself. Keep that split when you add a
 rule.
 
+**Mobile first, desktop on top (ADR-34).** Every rule outside a media query is the
+phone layout. The desktop layout is a block of `@media (min-width:1024px)` rules at the
+end of the file (dialogs centre from 640 px). It only styles class hooks that the phone
+rules never mention, so the phone layout cannot change:
+
+| Hook | Where | Desktop |
+|---|---|---|
+| `.app-body` | `App.jsx`, wraps `<main>` and the tab bar | side by side; the tab bar becomes a sticky left sidebar |
+| `.app-main` | `App.jsx`, the `<main>` | up to 1320 px wide (on a phone: 42 rem, the old `max-w-2xl`) |
+| `.week-days` | `WeekScreen` | the days in columns |
+| `.chain-grid` | `ScheduleScreen` | chain cards two abreast |
+| `.card-list` | `MasterScreen`, `TeamsScreen` | list cards in a grid |
+| `.narrow` | `DriverScreen`, `RideScreen`, `TeamDetail`, `TrainingDetail` | a centred 820 px column |
+
+`test/desktop-layout.test.jsx` checks that each hook is in the markup and that, with
+the min-width and print blocks cut out, the stylesheet never styles one. jsdom does no
+layout, so a layout change is checked with screenshots at a phone width (390 px) and a
+desktop one (1440 px): the phone ones must not change. A new screen picks a hook, or
+`.narrow` if it reads as text.
+
 **The one trap.** A few surfaces are *deliberately* dark — the header, the tab bar,
 the driver-view card headers, the active chip. They must use `--surface-inv` with
 `--on-inv` for their text, **never** `--ink` as a background: in dark mode `--ink`
@@ -1262,7 +1282,7 @@ merge, then add a `Field` to the ⚙ panel in `ScheduleScreen`.
 ### Add a new screen
 
 Add a component, add an entry to the `TABS` array (label + icon), and render it in
-`App` based on the active `tab`.
+`App` based on the active `tab`. Give its wrapper a desktop hook (§12.2), or `.narrow`.
 
 ### Change how data is stored
 

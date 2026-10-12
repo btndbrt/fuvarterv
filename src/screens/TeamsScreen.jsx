@@ -27,7 +27,7 @@ export function TeamsScreen({ state, update, notice }) {
         <span className="text-sm" style={{ color: "var(--ink2)" }}>{state.teams.length} csapat</span>
         <button className="btn btn-pri" onClick={() => setCreating(true)}><Plus size={17} /> Új csapat</button>
       </div>
-      <div className="flex flex-col gap-2">
+      <div className="flex flex-col gap-2 card-list">
         {state.teams.map((t) => {
           const trCount = state.trainings.filter((x) => x.teamId === t.id).length;
           return (
@@ -131,7 +131,7 @@ export function TeamDetail({ state, update, team, onBack }) {
   );
 
   return (
-    <div className="px-4 pb-4">
+    <div className="px-4 pb-4 narrow">
       <div className="flex items-center gap-2 py-3">
         <button className="iconbtn" onClick={onBack} aria-label="Vissza"><ChevronLeft size={18} /></button>
         <TeamDot color={team.color} size={14} />
@@ -232,7 +232,7 @@ export function TrainingDetail({ state, update, team, training, onBack }) {
   const when = (t) => (t.type === "weekly" ? (t.days || []).map((d) => DAYS_SHORT[d]).join(", ") : fmtDate(t.date));
 
   return (
-    <div className="px-4 pb-4">
+    <div className="px-4 pb-4 narrow">
       <div className="flex items-center gap-2 py-3">
         <button className="iconbtn" onClick={onBack} aria-label="Vissza"><ChevronLeft size={18} /></button>
         <TeamDot color={team.color} size={14} />
