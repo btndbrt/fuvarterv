@@ -162,7 +162,8 @@ busz hol áll, arról a klub gondoskodik.
 
 > **Figyelem:** telephely nélkül a program úgy számol, mintha a sofőr két fuvar között
 > mindig hazamehetne. Távoli helyszínnél ez nem igaz, ezért a költség és a fizetett idő
-> pontatlan lesz. A Beosztás fül ilyenkor figyelmeztet.
+> pontatlan lesz. A Beosztás fül ilyenkor figyelmeztet, és megnevezi, melyik sofőrnek
+> nincs telephelye.
 
 **Ha a járműveknél korábban saját telephelyet adtál meg**
 
@@ -192,7 +193,7 @@ nem változik magától.
 5. **Van országos autópálya-matricája** – kapcsold be, ha van.
 6. **Megjegyzés** (nem kötelező), majd **Mentés**.
 
-A járműnek nincs telephelye: azt a sofőrnél adod meg (lásd [5.5](#55-sofőrök)).
+A járműnek nincs saját telephelye: azt a sofőrnél adod meg (lásd [5.5](#55-sofőrök)).
 
 ### 5.5 Sofőrök
 

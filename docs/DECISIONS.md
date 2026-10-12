@@ -717,8 +717,9 @@ driver; they now carry `weekday` too, the one input the old single depot never n
 `homeTripMin` runs before any driver or bus is chosen, so it takes the shortest trip
 over every driver and every suitable bus, deduplicating pairs that resolve alike so
 data without driver depots costs what it did. `deleteGuard` counts a depot named by a
-driver. The Schedule screen's "no depot" warning is silent when every driver has one,
-since no run then asks the bus.
+driver. The Schedule screen's "no depot" warning names **drivers**, not buses
+(`driversWithoutBase`): a driver is covered by a depot or windows of their own, by the
+club's, or — until the move below — by an old depot on every bus they could be given.
 
 **The model trusts the rules.** It does not check that the bus could physically have
 got from where the last shift ended to where the next one starts: the Friday driver
@@ -763,11 +764,11 @@ and arrival. Simpler, since there is no circularity, but it answers a different 
 from the one the dispatcher asks: "for a 16:10 departure, where does the bus leave
 from?" is about when the bus leaves.
 
-**Where.** `baseAt`, `startBaseOf`, `endBaseOf`, `driverHasBase`,
+**Where.** `baseAt`, `startBaseOf`, `endBaseOf`, `driverHasBase`, `driversWithoutBase`,
 `depotMigrationPlan`, `applyDepotMigration` in `logic.js`; `DepotMigrationBanner` in
 `screens/DepotMigration.jsx`;
 `depotLegs`, `spanOf`, `homeTripMin`, `chainUse`, `rideUse` and `genDayTasks`
 (`task.weekday`) in `optimizer.js`; the depot picker and window editor in the driver
 form of `MasterScreen` (`WindowList`, shared with availability). Tests:
 `base-rules.test.js`, `base-rules-ui.test.jsx`, `depot-migration.test.js`,
-`depot-migration-ui.test.jsx`.
+`depot-migration-ui.test.jsx`, `driver-base-warning.test.jsx`.

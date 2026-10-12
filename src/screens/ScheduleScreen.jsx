@@ -9,7 +9,7 @@ import { DAYS, uid, byId } from "../domain/constants.js";
 import { mondayOf, weekdayIdx, minToTime, fmtDateFull, toISO } from "../domain/datetime.js";
 import { locName, matrixKey, computeMatrix } from "../domain/geo.js";
 import { resolveDay, dayStats, optimizeWeek, pairingIssue, withGeneratedRides, handRidesReplaced, driverAvailableFor, driverPay, chainUse, depotLegs, chainShifts } from "../domain/optimizer.js";
-import { baseOf, driverHasBase, depotMigrationPlan } from "../domain/logic.js";
+import { driversWithoutBase, depotMigrationPlan } from "../domain/logic.js";
 import { fmtFt, fmtH } from "../ui/format.js";
 import { Field, NumField, Check, Modal, PlateChip, TeamDot, EmptyState, InfoDot, BusyOverlay } from "../ui/base.jsx";
 import { VignettePill } from "../ui/VignettePill.jsx";
@@ -474,11 +474,8 @@ export function ScheduleScreen({ state, update }) {
   const setSetting = (k, v) => update((s) => ({ ...s, settings: { ...s.settings, [k]: v } }));
 
   const moveChainId = moveTask ? (res.chains.find((c) => c.tasks.some((t) => t.id === moveTask.id))?.id || null) : null;
-  /* Vehicles with no resolvable depot: neither their own nor the club's. Only a
-     problem for a driver without a depot of their own, since a driver's depot goes
-     with them to any bus; when every driver has one, no run ever asks the bus. */
-  const everyDriverHasBase = state.drivers.length > 0 && state.drivers.every(driverHasBase);
-  const baseless = everyDriverHasBase ? [] : state.vehicles.filter((v) => !baseOf(state, v.id));
+  /* Drivers the depot lookup finds nothing for (ADR-32: the depot is the driver's). */
+  const baseless = driversWithoutBase(state);
 
   /* Every STANDING warning about the day, gathered into one collapsible list so the
      chains start at the top of the screen instead of below a stack of banners.
@@ -495,7 +492,7 @@ export function ScheduleScreen({ state, update }) {
     <div key="baseless" className="banner banner-warn" style={{ display: "block" }}>
       <div className="flex items-center gap-2">
         <AlertTriangle size={16} />
-        <b>{baseless.length === state.vehicles.length ? "Egy járműnek sincs telephelye" : `${baseless.length} járműnek nincs telephelye`}</b>
+        <b>{baseless.length === state.drivers.length ? "Egy sofőrnek sincs telephelye" : `${baseless.length} sofőrnek nincs telephelye: ${baseless.map((d) => d.name).join(", ")}`}</b>
       </div>
       <div className="mt-1">
         Enélkül a beosztás úgy számol, hogy a sofőr két fuvar között hazamehet — távoli helyszínnél ez nem igaz,

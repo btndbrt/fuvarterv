@@ -336,6 +336,21 @@ export function endBaseOf(state, u) {
 export const driverHasBase = (driver) =>
   !!driver?.baseId || (driver?.baseRules || []).some((r) => ruleSpan(r));
 
+/* Drivers for whom the lookup finds no depot at all, so their paid time silently
+   falls back to the tasks. Covered: a depot or windows of their own, the club's, or —
+   only until the old bus depots are moved — a depot on every bus they could be given
+   (just their own bus under the fixed pairing, any bus otherwise). Windows alone
+   count: outside them there is no depot, but that is a choice the editor makes
+   visible, not a missing setting. */
+export function driversWithoutBase(state) {
+  if (state.settings?.defaultBaseId) return [];
+  return state.drivers.filter((d) => {
+    if (driverHasBase(d)) return false;
+    const buses = state.vehicles.filter((v) => vehicleAllowedFor(state, d, v.id));
+    return !(buses.length && buses.every((v) => v.baseId));
+  });
+}
+
 /* ---------- Moving bus depots to drivers (ADR-32) ----------
    The depot used to live on the bus. It now goes with the driver, but data saved
    before that still has depots on buses, and they keep working through the lookup's
