@@ -1100,6 +1100,8 @@ live data:
   file gives an empty workspace; a malformed one is an error, not an empty workspace.
 - The script binds the dev server to `127.0.0.1`. `vite.config.js` has `host: true`,
   which would otherwise serve the snapshot, with its personal data, to the whole LAN.
+  `npm run dev:local:lan` (`--host 0.0.0.0`) is the explicit opt-in for testing on a
+  phone; `test/local-mode.test.js` keeps the default on localhost.
 
 ### Deploy to Netlify
 

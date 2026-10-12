@@ -39,6 +39,7 @@ See `local-data/README.md` for details.
 |---|---|
 | `npm run dev` | the Vite dev server |
 | `npm run dev:local` | local test mode on `local-data/state.json`, no Supabase |
+| `npm run dev:local:lan` | the same, reachable from other devices on the network (no login: trusted networks only) |
 | `npm test` | Vitest, one run (19 files, 168 tests) |
 | `npm run lint` | ESLint (flat config) |
 | `npm run build` | a production build into `dist/`, with sourcemaps |

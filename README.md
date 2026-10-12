@@ -147,6 +147,7 @@ See `local-data/README.md` for details.
 |---|---|
 | `npm run dev` | Vite dev server |
 | `npm run dev:local` | local test mode on `local-data/state.json`, no Supabase |
+| `npm run dev:local:lan` | the same, reachable from other devices on the network (no login: trusted networks only) |
 | `npm test` | Vitest, single run |
 | `npm run lint` | ESLint |
 | `npm run build` | production build into `dist/` |

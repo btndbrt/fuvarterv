@@ -29,6 +29,13 @@ npm run dev:local          # http://localhost:5173
   localStorage only, and later loads use that copy.
 - **Újratöltés a fájlból** drops the browser copy and starts again from `state.json`.
 - **Munkapéldány letöltése** downloads the current working copy, to inspect or compare.
+- To open it on a phone or another computer on the same network, run
+  `npm run dev:local:lan` instead, and use the **Network** address Vite prints (e.g.
+  `http://192.168.1.21:5173`). Only do this on a network you trust: there is no login,
+  and anyone who can reach that address can download `state.json` with the club's
+  personal data. Stop it (Ctrl-C) when you are done. If the page doesn't open from the
+  other device, the computer's firewall may be blocking the port (e.g. `sudo ufw allow
+  5173/tcp`).
 - The Supabase client is switched off in this mode even if `.env` has the live
   credentials. Features that need the server (users and invites, saved versions) say
   they have no connection.

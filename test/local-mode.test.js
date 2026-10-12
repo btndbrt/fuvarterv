@@ -1,4 +1,5 @@
 import { describe, test, expect, beforeEach, afterEach, vi } from "vitest";
+import { readFileSync } from "node:fs";
 
 /*
  * Local test mode (`npm run dev:local`): the app runs on a snapshot of the live data
@@ -98,5 +99,21 @@ describe("local mode never talks to Supabase", () => {
     vi.resetModules();
     const c = await import("../src/supabaseClient.js");
     expect(c.isConfigured).toBe(true);
+  });
+});
+
+describe("who can reach local mode", () => {
+  /* The snapshot holds real names and phone numbers, and local mode has no login: the
+     default must stay on this machine, and the LAN must be a separate, explicit choice. */
+  const scripts = JSON.parse(readFileSync("package.json", "utf8")).scripts;
+
+  test("dev:local listens on this machine only", () => {
+    expect(scripts["dev:local"]).toMatch(/--mode offline/);
+    expect(scripts["dev:local"]).toMatch(/--host 127\.0\.0\.1\b/);
+  });
+
+  test("dev:local:lan opens it to the local network, on purpose", () => {
+    expect(scripts["dev:local:lan"]).toMatch(/--mode offline/);
+    expect(scripts["dev:local:lan"]).toMatch(/--host 0\.0\.0\.0\b/);
   });
 });
