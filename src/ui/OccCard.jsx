@@ -4,7 +4,7 @@
 import { AlertTriangle, MapPin, Clock, ChevronsRight, Lock } from "lucide-react";
 import { byId } from "../domain/constants.js";
 import { minToTime, mondayOf } from "../domain/datetime.js";
-import { findRides, findConflicts, venueDepartMin, isMatch, matchBuses } from "../domain/logic.js";
+import { findRides, findConflicts, venueDepartMin, isMatch, tripBuses } from "../domain/logic.js";
 import { rideLocked } from "../domain/optimizer.js";
 import { PlateChip } from "./base.jsx";
 import { timeToMin } from "../domain/datetime.js";
@@ -18,7 +18,10 @@ export function OccCard({ state, occ, onOpen }) {
      training's dated rides stand in for the template's (ADR-33). */
   const rides = findRides(state, training, occ.dayIdx, occ.dateISO);
   const weekMon = occ.dateISO ? mondayOf(occ.dateISO) : null;
-  const match = isMatch(training) ? matchBuses(training) : null;
+  /* A match (ADR-33) or, on this date only, an ad hoc trip (ADR-35): the training
+     brings its own buses and free-text drivers. */
+  const ownBuses = occ.dateISO ? tripBuses(state, training, occ.dateISO) : [];
+  const match = ownBuses.length ? ownBuses : null;
 
   return (
     <button onClick={onOpen} className="card w-full text-left p-0 overflow-hidden flex" style={{ cursor: "pointer" }}>
@@ -28,7 +31,7 @@ export function OccCard({ state, occ, onOpen }) {
           <span className="tnum text-lg">{training.start}–{training.end}</span>
           <span className="font-semibold truncate">{team?.name || "?"}</span>
           {match
-            ? <span className="text-xs pill disp" style={{ background: "var(--acc)", color: "#fff" }}>MÉRKŐZÉS</span>
+            ? <span className="text-xs pill disp" style={{ background: "var(--acc)", color: "#fff" }}>{isMatch(training) ? "MÉRKŐZÉS" : "EDZŐ/SZÜLŐ"}</span>
             : training.type === "once" && <span className="text-xs pill" style={{ background: "var(--paper2)", color: "var(--ink2)" }}>egyszeri</span>}
         </div>
         {match && match.map((b, i) => {

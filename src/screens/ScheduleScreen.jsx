@@ -122,7 +122,7 @@ export function ChainCard({ state, chain: c, place, onLock, onMove, onToggleChai
     <div className="card mb-3 overflow-hidden">
       <div className="p-3 flex items-center gap-2 flex-wrap" style={{ background: "var(--surface-inv)", color: "var(--on-inv)" }}>
         {c.match
-          ? <span className="disp text-base">Mérkőzés · {c.driverName || "nincs sofőr megadva"}</span>
+          ? <span className="disp text-base">{c.adhoc ? "Edző/szülő" : "Mérkőzés"} · {c.driverName || "nincs sofőr megadva"}</span>
           : <span className="disp text-base">{c.driver?.name || "— nincs sofőr —"}</span>}
         {c.vehicle && <PlateChip plate={c.vehicle.plate} />}
         {c.vehicle?.hasVignette && <VignettePill />}
@@ -143,7 +143,7 @@ export function ChainCard({ state, chain: c, place, onLock, onMove, onToggleChai
         {/* The money belongs to the shift, so it is stated once, on the chain that
             opens it. Repeating it on the next card would read as a second turn-out. */}
         {c.match ? (
-          <span>A mérkőzésre szóló fuvar: a busz erre az időre foglalt, a sofőr nem a klub sofőrje, ezért bér és kiszállási díj nem jár.</span>
+          <span>{c.adhoc ? "Ezen a napon edző vagy szülő viszi a csapatot" : "A mérkőzésre szóló fuvar"}: a busz erre az időre foglalt, a sofőr nem a klub sofőrje, ezért bér és kiszállási díj nem jár.</span>
         ) : first ? (
           <>
             <span>fizetett: <b>{fmtH(paid)}</b>{paid > (span ? span.end - span.start : c.end - c.start) ? " (min. műszak)" : ""}</span>

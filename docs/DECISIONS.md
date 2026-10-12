@@ -45,6 +45,7 @@ Unless a record says otherwise, the decision is **still in force**.
 | [ADR-32](#adr-32--the-depot-goes-with-the-driver-and-can-depend-on-the-day-and-the-time) | Driver depot, time-dependent | optimisation |
 | [ADR-33](#adr-33--a-match-is-a-one-off-training-with-its-own-buses-and-its-date-gets-its-own-plan) | Matches, dated plans | data model |
 | [ADR-34](#adr-34--a-desktop-layout-on-top-of-the-mobile-one-in-css-only) | Desktop layout | UI |
+| [ADR-35](#adr-35--a-coach-or-parent-can-drive-one-occurrence-of-a-weekly-training) | Ad hoc trips | data model |
 
 ---
 
@@ -898,3 +899,40 @@ four tabs), 800 px (still the phone layout), 1024 px and 1440 px.
 change CSS can make. **Rejected.** Tailwind's `lg:` prefixes in the markup: they would
 scatter the desktop layout over every screen, where the phone check above could not
 see it.
+
+## ADR-35 — A coach or parent can drive one occurrence of a weekly training
+
+**Context.** The dispatcher's email asked to give coaches a bus "ad hoc", and to let a
+parent drive without a user account. ADR-33 delivered that for matches (one-off
+trainings). Asked whether trainings need it too, occasionally or every week, the answer
+was occasionally: "this Tuesday the coach takes the team".
+
+**Decision.** `adhocTrips: { "YYYY-MM-DD": { [trainingId]: { buses: [{ vehicleId,
+driverName }] } } }`, set per occurrence of a weekly training, from the ride editor of
+that date ("Ezen a napon edző vagy szülő viszi"). It is the match mechanism applied to
+one occurrence: `tripBuses(state, training, date)` answers "which buses does this
+training bring of its own on this date" for a match and for an ad hoc trip alike, and
+everything ADR-33 built follows from it unchanged — the team split by stops across the
+picked buses, one locked driverless chain per bus with the free-text name, the buses
+booked for the window, the pairing relaxed for their own drivers, no wage or fairness
+share, reasons that name the trip ("Alkalmi sofőr: …"), and the date's own plan
+(`dateAssignments`), so every other week keeps the template. `withAdhocTrip` sets or
+clears one occurrence and drops empty containers, so a cleared trip leaves the state as
+if it had never been set. An entry for a date the training does not happen on is
+ignored. A bus used by an ad hoc trip cannot be deleted.
+
+**Old data (E8).** `ensureShape` fills `adhocTrips: {}`; with no entries no weekly
+training brings buses of its own, and nothing changes. An older client ignores the field.
+
+**Rejected.** A weekly free-text driver ("every Tuesday the coach drives"). Not asked
+for; it would put drivers without records into the weekly template. It can be added as
+a field on the training later, read by the same `tripBuses`.
+
+**Rejected.** A free-text driver option in the ride editor's driver list. A ride is
+rebuilt from the schedule's chains on every apply, so a free-text name there would be
+overwritten, and the bus would not be booked for the optimizer.
+
+**Where.** `adhocBuses`, `tripBuses`, `withAdhocTrip`, `matchesOn` in `logic.js`;
+`genDayTasks`, `matchChainsOf`, `matchDayState` in `optimizer.js`; `AdhocTripCard` in
+`RideScreen`; `BusListEditor` in `ui/BusListEditor.jsx`, shared with the match form.
+Tests: `adhoc-trips.test.js`, `adhoc-trips-ui.test.jsx`.

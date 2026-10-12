@@ -101,7 +101,8 @@ describe("the lock box in the ride editor", () => {
     root = createRoot(container);
     root.render(<RideEditor state={state} update={onUpdate} training={state.trainings[0]} dayIdx={WD} dateISO={DATE} onBack={() => {}} />);
   });
-  const box = () => container.querySelector('input[type="checkbox"]');
+  /* By its label: the ride editor also offers "edző vagy szülő viszi" for the date (ADR-35). */
+  const box = () => [...container.querySelectorAll("label")].find((l) => l.textContent.startsWith("Zárolás"))?.querySelector('input[type="checkbox"]');
   const click = (el) => act(() => el.dispatchEvent(new MouseEvent("click", { bubbles: true })));
   const save = () => click([...container.querySelectorAll("button")].find((b) => b.textContent.trim() === "Fuvar mentése"));
 

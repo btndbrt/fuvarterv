@@ -762,6 +762,27 @@ A sofőr választó alatt van a **„Zárolás — az optimalizálás nem írja 
 
 ---
 
+### 10.6 Ezen a napon edző vagy szülő viszi
+
+Ha egy heti edzésre **egyszer** nem a klub sofőrje viszi a csapatot, hanem az edző vagy
+egy szülő, ezt az adott alkalomnál állíthatod be. Felhasználót nem kell létrehozni.
+
+1. A **Hét** fülön kattints az edzésre azon a napon.
+2. Felül pipáld be: **Ezen a napon edző vagy szülő viszi**.
+3. Válaszd ki a **buszt**, és írd be a **sofőr nevét** (pl. „Kiss edző”). Ha a csapat
+   nem fér el egy buszon, a **Busz hozzáadása** gombbal vehetsz fel még buszt – az űrlap
+   kiírja, hány busz kell.
+4. Kattints az **Alkalmi sofőr mentése** gombra.
+5. Futtasd újra a **heti optimalizálást**, hogy a többi fuvar is igazodjon hozzá.
+
+Ugyanúgy működik, mint a mérkőzés ([6.9](#69-mérkőzés)): a busz a csapatot a
+megállóiból viszi, a busz erre az időre senki másnak nem osztható be, a busz saját
+sofőrje aznap másik buszt kaphat, a beírt sofőrnek nem jár bér, és **a többi hét nem
+változik**. A Hét fülön a kártyán **EDZŐ/SZÜLŐ** címke jelzi, a Beosztás fülön külön
+kártya („Edző/szülő · Kiss edző”).
+
+Visszavonás: vedd ki a pipát, és kattints az **Alkalmi sofőr mentése** gombra.
+
 ## 11. A sofőr napi nézete (Sofőr fül)
 
 Ezt a nézetet elsősorban a **sofőrök** használják, a telefonjukon. Nagy betűs, könnyen olvasható,
