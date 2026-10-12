@@ -13,7 +13,7 @@ import { DAYS, byId, uid } from "./constants.js";
 import { timeToMin, minToTime, weekdayIdx, toISO, addDays } from "./datetime.js";
 import { legMin, locName } from "./geo.js";
 import { weekOccurrences, legFor, legSource, taskNeedsVignette, chainNeedsVignette, vignetteVenues, startBaseOf, endBaseOf, driverHasBase, rideWindow, fixedVehicleOf, vehicleAllowedFor,
-  isMatch, matchBuses, matchesOn, datedPlan, storedChains, withStoredChains, rideOnDate } from "./logic.js";
+  tripBuses, matchesOn, datedPlan, storedChains, withStoredChains, rideOnDate } from "./logic.js";
 
 /* Held-Karp: the shortest order that visits every station.
    pre/post pin a point before/after the chain (typically the venue);
@@ -167,8 +167,9 @@ export function genDayTasks(state, weekday, weekMon) {
     const suffix = t.type === "weekly" ? weekday : "x";
     /* A match (ADR-33) is split across ITS buses, so the split follows their seats —
        the smallest of them, so every group fits every bus — and not the fleet's. */
-    const match = isMatch(t);
-    const matchSeats = match ? matchBuses(t).map((b) => Number(byId(state.vehicles, b.vehicleId)?.seats) || 0).filter((n) => n > 0) : [];
+    const ownBuses = tripBuses(state, t, o.dateISO);
+    const match = ownBuses.length > 0;
+    const matchSeats = match ? ownBuses.map((b) => Number(byId(state.vehicles, b.vehicleId)?.seats) || 0).filter((n) => n > 0) : [];
     const seatCap = matchSeats.length ? Math.min(...matchSeats) : maxSeats;
     const capWhat = matchSeats.length ? `a mérkőzés buszainak férőhelyét (${seatCap} fő)` : `a legnagyobb jármű férőhelyét (${seatCap} fő)`;
     const teamLabel = perTeam[t.teamId] > 1 ? `${team.name} · ${locName(state, t.venueId)}` : team.name;
@@ -917,12 +918,17 @@ export function contentionReasons(state, weekday, t) {
    picked than needed) gets no chain, so it is not booked, and the first chain says
    so. */
 const groupIdx = (t) => Number((/#(\d+)$/.exec(t.id) || [0, 1])[1]);
-function matchChainsOf(state, tasks) {
+function matchChainsOf(state, tasks, dateISO) {
   const out = [];
-  for (const tr of state.trainings.filter(isMatch)) {
+  for (const tr of state.trainings) {
+    const buses = tripBuses(state, tr, dateISO);
+    if (!buses.length) continue;
     const ts = tasks.filter((t) => t.trainingId === tr.id);
     if (!ts.length) continue;
-    const buses = matchBuses(tr);
+    /* A weekly training's trip is ad hoc (ADR-35); a one-off training's is a match. */
+    const adhoc = tr.type === "weekly";
+    const label = adhoc ? "Alkalmi sofőr" : "Mérkőzés";
+    const where = adhoc ? "a Fuvar szerkesztőben" : "az edzésnél";
     const groups = Math.max(...ts.map(groupIdx));
     const mine = [];
     for (let k = 1; k <= groups; k++) {
@@ -930,21 +936,21 @@ function matchChainsOf(state, tasks) {
       const gt = ts.filter((t) => groupIdx(t) === k);
       if (!gt.length) continue;
       const c = mkChain(state, gt.map((t) => ({ ...t, locked: true })), {
-        id: `match:${tr.id}:${k}`, match: true, locked: true,
+        id: `match:${tr.id}:${k}`, match: true, ...(adhoc ? { adhoc: true } : {}), locked: true,
         driverId: null, driverName: bus?.driverName || "", vehicleId: bus?.vehicleId || null,
       });
       c.vehicle = bus ? byId(state.vehicles, bus.vehicleId) : undefined;
       c.issues = [];
       if (!bus)
-        c.issues.push(`Mérkőzés: a csapathoz ${groups} busz kell, de csak ${buses.length} van megadva — ennek a csoportnak (${c.maxPax} fő) nincs busza. Adj hozzá buszt az edzésnél.`);
-      else if (!c.vehicle) c.issues.push("A mérkőzés egyik busza már nem létezik — válassz másikat az edzésnél.");
+        c.issues.push(`${label}: a csapathoz ${groups} busz kell, de csak ${buses.length} van megadva — ennek a csoportnak (${c.maxPax} fő) nincs busza. Adj hozzá buszt ${where}.`);
+      else if (!c.vehicle) c.issues.push(`${label}: az egyik busz már nem létezik — válassz másikat ${where}.`);
       else if (c.maxPax > c.vehicle.seats)
-        c.issues.push(`Mérkőzés: a létszám (${c.maxPax} fő) meghaladja a(z) ${c.vehicle.plate} férőhelyét (${c.vehicle.seats}). Adj hozzá buszt az edzésnél, vagy javítsd a létszámot.`);
+        c.issues.push(`${label}: a létszám (${c.maxPax} fő) meghaladja a(z) ${c.vehicle.plate} férőhelyét (${c.vehicle.seats}). Adj hozzá buszt ${where}, vagy javítsd a létszámot.`);
       mine.push(c);
     }
     const spare = buses.slice(groups).map((b) => byId(state.vehicles, b.vehicleId)?.plate).filter(Boolean);
     if (spare.length && mine.length)
-      mine[0].issues.push(`Mérkőzés: a csapat ${groups} buszon elfér, ezért ${spare.join(", ")} nem kell — nincs lefoglalva, más fuvarra beosztható.`);
+      mine[0].issues.push(`${label}: a csapat ${groups} buszon elfér, ezért ${spare.join(", ")} nem kell — nincs lefoglalva, más fuvarra beosztható.`);
     out.push(...mine);
   }
   return out;
@@ -955,7 +961,8 @@ function matchChainsOf(state, tasks) {
    they get their own bus back whenever it is free. */
 export function matchDayState(state, weekday, weekMon) {
   if (!weekMon || !state.settings?.fixedVehicle) return state;
-  const buses = new Set(matchesOn(state, toISO(addDays(weekMon, weekday))).flatMap((t) => matchBuses(t).map((b) => b.vehicleId)));
+  const date = toISO(addDays(weekMon, weekday));
+  const buses = new Set(matchesOn(state, date).flatMap((t) => tripBuses(state, t, date).map((b) => b.vehicleId)));
   if (!buses.size) return state;
   return { ...state, drivers: state.drivers.map((d) => (buses.has(d.preferredVehicleId) ? { ...d, matchRelaxed: true } : d)) };
 }
@@ -994,7 +1001,7 @@ export function resolveDay(state, weekday, weekMon) {
       c.issues.push(`A(z) ${c.vehicle.plate} nincs országos matricával, de a lánc ide megy: ${vignetteVenues(state, c).join(", ")}.`);
     chains.push(c);
   }
-  for (const m of matchChainsOf(state, tasks)) {
+  for (const m of matchChainsOf(state, tasks, weekMon ? toISO(addDays(weekMon, weekday)) : null)) {
     m.tasks.forEach((t) => assigned.add(t.id));
     chains.push(m);
   }
@@ -1322,7 +1329,9 @@ export function optimizeDay(state, weekday, weekMon, fairness = null) {
   const matchUses = matchCh.map((c) => chainUse(c, null, c.vehicleId));
   const matchReason = (t) => matchCh
     .filter((m) => m.start < t.end && t.start < m.end)
-    .map((m) => `Mérkőzés: a(z) ${m.vehicle?.plate || "?"} ${minToTime(m.start)}–${minToTime(m.end)} között mérkőzésre visz (${m.tasks[0].label.split(" · ")[0]}${m.driverName ? `, sofőr: ${m.driverName}` : ""}), ezért ekkor nem osztható be.`);
+    .map((m) => (m.adhoc
+      ? `Alkalmi sofőr: a(z) ${m.vehicle?.plate || "?"} ${minToTime(m.start)}–${minToTime(m.end)} között a(z) ${m.tasks[0].label.split(" · ")[0]} csapatot viszi edző/szülő${m.driverName ? ` (${m.driverName})` : ""}, ezért ekkor nem osztható be.`
+      : `Mérkőzés: a(z) ${m.vehicle?.plate || "?"} ${minToTime(m.start)}–${minToTime(m.end)} között mérkőzésre visz (${m.tasks[0].label.split(" · ")[0]}${m.driverName ? `, sofőr: ${m.driverName}` : ""}), ezért ekkor nem osztható be.`));
   const maxSeats = Math.max(0, ...state.vehicles.map((v) => Number(v.seats) || 0));
 
   /* Locked work becomes skeleton chains carrying their driver and vehicle.

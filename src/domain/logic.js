@@ -44,8 +44,44 @@ export function weekOccurrences(state, mon) {
    match. matchBuses skips a row whose bus was never picked. */
 export const matchBuses = (t) => (t?.match?.buses || []).filter((b) => b.vehicleId);
 export const isMatch = (t) => !!(t && t.type === "once" && matchBuses(t).length);
+
+/* ---------- Ad hoc trips (ADR-35) ----------
+   On one date, a coach or a parent drives a WEEKLY training's team, on buses picked
+   for that date:
+
+     adhocTrips: { "YYYY-MM-DD": { [trainingId]: { buses: [{ vehicleId, driverName }] } } }
+
+   It is the match mechanism applied to one occurrence, so the rest of the code asks
+   one question of any training on any date: which buses does it bring of its own?
+   tripBuses answers it for both — a match's buses on its date, an ad hoc trip's on
+   its date — and every match rule (own chains, booked buses, relaxed pairing, the
+   date's own plan) follows from it. An entry for a date the training does not happen
+   on is ignored. */
+export function adhocBuses(state, t, dateISO) {
+  if (!t || t.type !== "weekly" || !dateISO || !(t.days || []).includes(weekdayIdx(dateISO))) return [];
+  return (state.adhocTrips?.[dateISO]?.[t.id]?.buses || []).filter((b) => b.vehicleId);
+}
+export const tripBuses = (state, t, dateISO) =>
+  (isMatch(t) ? (t.date === dateISO ? matchBuses(t) : []) : adhocBuses(state, t, dateISO));
+
+/* Set or clear one occurrence's ad hoc trip. Empty containers are dropped, so a
+   cleared trip leaves the state exactly as if it had never been set. */
+export function withAdhocTrip(state, dateISO, trainingId, buses) {
+  const all = { ...(state.adhocTrips || {}) };
+  const day = { ...(all[dateISO] || {}) };
+  const keep = (buses || []).filter((b) => b.vehicleId)
+    .map((b) => ({ vehicleId: b.vehicleId, driverName: (b.driverName || "").trim() }));
+  if (keep.length) day[trainingId] = { buses: keep };
+  else delete day[trainingId];
+  if (Object.keys(day).length) all[dateISO] = day;
+  else delete all[dateISO];
+  return { ...state, adhocTrips: all };
+}
+
+/* The trainings that bring their own buses on this date: matches and ad hoc trips.
+   Such a date gets its own plan (datedPlan). */
 export const matchesOn = (state, dateISO) =>
-  state.trainings.filter((t) => isMatch(t) && t.date === dateISO);
+  state.trainings.filter((t) => tripBuses(state, t, dateISO).length > 0);
 export const isMatchDate = (state, dateISO) => matchesOn(state, dateISO).length > 0;
 
 /* ---------- Where a day's plan is stored ----------
@@ -546,7 +582,10 @@ export function deleteGuard(state, kind, id) {
       // stays true for every bus, so preferredBias hides that driver for good.
       + state.drivers.filter((d) => d.preferredVehicleId === id).length
       // A match without its bus would silently lose a bus, or stop being a match.
-      + state.trainings.filter((t) => (t.match?.buses || []).some((b) => b.vehicleId === id)).length;
+      + state.trainings.filter((t) => (t.match?.buses || []).some((b) => b.vehicleId === id)).length
+      // Likewise an ad hoc trip (ADR-35).
+      + Object.values(state.adhocTrips || {}).flatMap((day) => Object.values(day))
+        .filter((trip) => (trip.buses || []).some((b) => b.vehicleId === id)).length;
     return n(c, "fuvar/beosztás/sofőr/mérkőzés");
   }
   if (kind === "bases") {

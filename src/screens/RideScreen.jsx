@@ -4,9 +4,10 @@ import { useState, useMemo, useRef } from "react";
 import { ChevronLeft, ChevronRight, GripVertical, ArrowUp, ArrowDown, AlertTriangle, MapPin, Clock, X, Flag, Zap, Lock } from "lucide-react";
 import { DAYS, uid, byId } from "../domain/constants.js";
 import { mondayOf, addDays, timeToMin, minToTime, fmtDate, fmtDateFull, fmtWeekRange } from "../domain/datetime.js";
-import { weekOccurrences, findRides, findConflicts, rideWindow, seatSum, venueDepartMin, legFor, venueNeedsVignette, storedChains, datedPlan } from "../domain/logic.js";
-import { planOda, planVissza, bestStationOrder, taskForRide, taskLock, rideLocked, saveLockedRide, unlockRideTask } from "../domain/optimizer.js";
+import { weekOccurrences, findRides, findConflicts, rideWindow, seatSum, venueDepartMin, legFor, venueNeedsVignette, storedChains, datedPlan, adhocBuses, withAdhocTrip } from "../domain/logic.js";
+import { planOda, planVissza, bestStationOrder, taskForRide, taskLock, rideLocked, saveLockedRide, unlockRideTask, legPax } from "../domain/optimizer.js";
 import { Field, Check, DangerBtn, EmptyState } from "../ui/base.jsx";
+import { BusListEditor, firstBus } from "../ui/BusListEditor.jsx";
 import { OccCard } from "../ui/OccCard.jsx";
 
 /* ---------- Ride editor ---------- */
@@ -51,6 +52,9 @@ export function RideEditor({ state, update, training, dayIdx, dateISO, onBack })
   const existing = idx < rides.length ? rides[idx] : null;
   return (
     <div className="narrow">
+      {training.type === "weekly" && dateISO && (
+        <AdhocTripCard state={state} update={update} training={training} dateISO={dateISO} />
+      )}
       {rides.length > 0 && (
         <div className="px-4 pt-3 flex gap-2 flex-wrap">
           {rides.map((r, i) => {
@@ -68,6 +72,36 @@ export function RideEditor({ state, update, training, dayIdx, dateISO, onBack })
       <RideForm key={existing ? existing.id : `uj-${rides.length}`}
         state={state} update={update} training={training}
         dayIdx={dayIdx} dateISO={dateISO} existing={existing} onBack={onBack} />
+    </div>
+  );
+}
+
+/* One occurrence of a weekly training driven by a coach or a parent (ADR-35): the
+   buses for that date and the free-text drivers. Saved on its own button, because it
+   is about the date's plan, not about the ride below it. */
+export function AdhocTripCard({ state, update, training, dateISO }) {
+  const saved = adhocBuses(state, training, dateISO);
+  const [on, setOn] = useState(saved.length > 0);
+  const [buses, setBuses] = useState(saved.length ? saved : firstBus(state));
+  const team = byId(state.teams, training.teamId);
+  const pax = team ? Math.max(legPax(team, training, "oda"), legPax(team, training, "vissza")) : 0;
+  const [msg, setMsg] = useState("");
+  const save = () => {
+    update((s) => withAdhocTrip(s, dateISO, training.id, on ? buses : null));
+    setMsg(on
+      ? "Mentve. Futtasd újra a heti optimalizálást, hogy a többi fuvar is igazodjon hozzá."
+      : "Törölve: ezen a napon is a klub sofőrjei viszik a csapatot.");
+  };
+  return (
+    <div className="px-4 pt-3">
+      <div className="card p-3">
+        <Check label={`Ezen a napon edző vagy szülő viszi (${fmtDate(dateISO)})`}
+          hint="Csak erre az egy alkalomra: a csapatot a megadott busz(ok) viszi a megállóiból, a busz erre az időre senki másnak nem osztható be, a többi hét nem változik."
+          checked={on} onChange={(v) => { setOn(v); setMsg(""); }} />
+        {on && <BusListEditor state={state} buses={buses} onChange={(b) => { setBuses(b); setMsg(""); }} pax={pax} />}
+        <button className="btn btn-ghost" disabled={on && !buses.every((b) => b.vehicleId)} onClick={save}>Alkalmi sofőr mentése</button>
+        {msg && <div className="text-sm mt-2" style={{ color: "var(--ink2)" }}>{msg}</div>}
+      </div>
     </div>
   );
 }

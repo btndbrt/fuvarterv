@@ -414,6 +414,7 @@ The whole app state is one plain object. Its top-level keys:
   rides:       [ ... ],   // concrete bus runs bound to a training occurrence
   assignments: { ... },   // the saved schedule (per weekday: chains of tasks)
   dateAssignments: { ... }, // a match date's own plan (per date: chains of tasks)
+  adhocTrips:  { ... },   // a coach/parent driving one occurrence of a weekly training
   matrix:      { ... }|null, // cached road travel-time matrix
   settings:    { ... },   // tunable numbers
 }
@@ -591,6 +592,17 @@ can belong to one occurrence (several buses carrying one team).
 A **chain** is one driver+bus doing a sequence of tasks back-to-back. `taskIds`
 references derived tasks (see [§10](#10-the-optimizer-step-by-step)). `locked: true`
 means "don't let the optimizer move this task."
+
+**Ad hoc trips** (`adhocTrips`) — a coach or a parent driving one occurrence of a
+weekly training (ADR-35):
+```js
+{ "YYYY-MM-DD": { [trainingId]: { buses: [ { vehicleId, driverName } ] } } }
+```
+It is a match for that one date. **Never read it directly**: `tripBuses(state,
+training, dateISO)` in `logic.js` returns the buses a training brings of its own on a
+date — a match's or an ad hoc trip's — and the match code reads only that. Set or clear
+an occurrence with `withAdhocTrip`. A date with an ad hoc trip is a "match date" for
+`dateAssignments` below.
 
 **Date assignments** (`dateAssignments`) — a match date's own plan, keyed by
 `"YYYY-MM-DD"`, each value shaped like one weekday of `assignments` (ADR-33). The

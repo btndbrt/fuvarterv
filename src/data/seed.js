@@ -68,6 +68,9 @@ export function ensureShape(s) {
   /* A match date's own plan (ADR-33). Empty: every date reads the weekly template,
      which is all there was before. */
   s.dateAssignments = s.dateAssignments || {};
+  /* A coach or parent driving one occurrence of a weekly training (ADR-35). Empty:
+     every weekly training is driven by the roster, which is all there was before. */
+  s.adhocTrips = s.adhocTrips || {};
   return s;
 }
 
@@ -229,5 +232,6 @@ export function seedState() {
     matrix: null,
     assignments: {},
     dateAssignments: {},
+    adhocTrips: {},
   };
 }
