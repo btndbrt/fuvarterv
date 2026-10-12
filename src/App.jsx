@@ -199,7 +199,10 @@ export default function App() {
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-2xl" style={{ paddingBottom: 84 }}>
+      {/* app-body holds the navigation and the content side by side on a desktop
+          (ADR-34); on a phone it is a plain block and the tab bar stays at the bottom. */}
+      <div className="app-body">
+      <main className="app-main">
         {isAdmin && tab === "week" && <WeekScreen state={state} openRide={openRide} />}
         {isAdmin && tab === "sched" && <ScheduleScreen state={state} update={update} />}
         {isAdmin && tab === "data" && <DataScreen state={state} update={update} notice={notice} setNotice={setNotice} myEmail={myEmail} />}
@@ -218,6 +221,7 @@ export default function App() {
           );
         })}
       </nav>
+      </div>
       {printWeek && <PrintSheets state={state} weekMonISO={printWeek} onClose={() => setPrintWeek(null)} />}
       {helpOpen && <HelpSheet onClose={() => setHelpOpen(false)} />}
     </div>

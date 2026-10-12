@@ -44,6 +44,7 @@ Unless a record says otherwise, the decision is **still in force**.
 | [ADR-31](#adr-31--fixed-driverbus-pairing-is-a-switch-not-a-bigger-bias) | Fixed pairing | optimisation |
 | [ADR-32](#adr-32--the-depot-goes-with-the-driver-and-can-depend-on-the-day-and-the-time) | Driver depot, time-dependent | optimisation |
 | [ADR-33](#adr-33--a-match-is-a-one-off-training-with-its-own-buses-and-its-date-gets-its-own-plan) | Matches, dated plans | data model |
+| [ADR-34](#adr-34--a-desktop-layout-on-top-of-the-mobile-one-in-css-only) | Desktop layout | UI |
 
 ---
 
@@ -867,3 +868,33 @@ because the coach or parent who drives is tied to a particular bus.
 `dayStats`, `ridesFromChains` in `optimizer.js`; the match fields in `TrainingForm`,
 the marker in `OccCard`, the match card in `ScheduleScreen`. Tests: `matches.test.js`,
 `matches-ui.test.jsx`.
+
+
+## ADR-34 — A desktop layout on top of the mobile one, in CSS only
+
+**Context.** The app was built for phones: one 672 px column and a tab bar fixed to
+the bottom. The dispatcher plans the week at a computer, where that left most of a
+1440 px screen empty, stretched four tabs across its full width, and showed one day
+or one chain at a time where several fit.
+
+**Decision.** The phone layout stays exactly as it is, and the desktop layout is
+added on top: `@media (min-width:1024px)` rules at the end of `styles.css` (dialogs
+centre from 640 px). The markup only gains class hooks the phone rules never mention
+(`app-body`, `week-days`, `chain-grid`, `card-list`, `narrow`), plus `app-main`, which
+takes over `mx-auto w-full max-w-2xl` and the inline bottom padding one to one. On a
+desktop the tab bar becomes a sticky left sidebar, the content widens to 1320 px, the
+week's days and the schedule's chains go into columns, master-data lists into a grid,
+and screens that read as text (the driver's day, the ride editor, a team's or a
+training's page) stay a centred 820 px column. The print stylesheet hides `.app-body`
+instead of `main` and `nav`, which are no longer direct children of `.ft-root`.
+
+**How it is checked.** `test/desktop-layout.test.jsx`: the hooks are in the markup,
+and the stylesheet with its min-width and print blocks cut out never styles one — that
+is what keeps the phone layout from moving. jsdom does no layout, so the look was
+checked with screenshots on the real data at 390 px (pixel-identical to before, on all
+four tabs), 800 px (still the phone layout), 1024 px and 1440 px.
+
+**Rejected.** A separate desktop component tree. Two layouts to keep in step, for a
+change CSS can make. **Rejected.** Tailwind's `lg:` prefixes in the markup: they would
+scatter the desktop layout over every screen, where the phone check above could not
+see it.

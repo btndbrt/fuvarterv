@@ -26,7 +26,7 @@ export function RidePicker({ state, onPick }) {
   const [mon, setMon] = useState(() => mondayOf(new Date()));
   const occs = weekOccurrences(state, mon);
   return (
-    <div className="px-4 pb-4">
+    <div className="px-4 pb-4 narrow">
       <div className="py-3"><h2 className="disp text-xl">Fuvar szerkesztő</h2>
         <p className="text-sm mt-1" style={{ color: "var(--ink2)" }}>Válaszd ki az edzésalkalmat, amihez fuvart rendelsz.</p>
       </div>
@@ -50,7 +50,7 @@ export function RideEditor({ state, update, training, dayIdx, dateISO, onBack })
   const idx = Math.min(selIdx, rides.length); // rides.length = új fuvar
   const existing = idx < rides.length ? rides[idx] : null;
   return (
-    <div>
+    <div className="narrow">
       {rides.length > 0 && (
         <div className="px-4 pt-3 flex gap-2 flex-wrap">
           {rides.map((r, i) => {

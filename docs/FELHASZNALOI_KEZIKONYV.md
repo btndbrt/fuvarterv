@@ -77,7 +77,10 @@ Ha nincs még fiókod, vagy elfelejtetted a jelszavad, fordulj a klub rendszerga
 | ? (kérdőjel) | **Súgó** | Rövid összefoglaló a program működéséről. |
 
 **Alul** találod a **füleket** (fő menü): **Hét**, **Beosztás**, **Adatok**, **Sofőr**.
-A kiválasztott fül világít.
+A kiválasztott fül világít. **Számítógépen** (széles ablakban) a fülek **bal oldalt**,
+függőleges menüben vannak, és a program kihasználja a szélességet: a Hét fülön a napok
+egymás mellett, a Beosztás fülön a láncok két oszlopban, az Adatok fülön a listák
+rácsban jelennek meg.
 
 **Kis kérdőjelek (?)**: sok gomb és mező mellett van egy kis kérdőjel. Kattints rá, és
 megjelenik egy rövid magyarázat. Máshova kattintva eltűnik.
