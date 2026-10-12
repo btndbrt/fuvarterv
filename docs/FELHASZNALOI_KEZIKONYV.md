@@ -156,12 +156,31 @@ Ez azért fontos, mert **a sofőr fizetett ideje a telephelytől a telephelyig t
 Ha a sofőr a buszt nem a klub telephelyén tartja (például otthon), azt **a sofőrnél**
 adod meg (lásd [5.5](#55-sofőrök)). A sofőr telephelye vele megy: bármelyik buszt kapja,
 onnan indul. Ha ez napszaktól vagy naptól függ (például napközben a munkahelyén van),
-azt is a sofőrnél adod meg, az **Időszakos telephely** résznél. A járműnél is megadhatsz
-telephelyet: ez akkor számít, ha a busz sofőrjének nincs saját telephelye.
+azt is a sofőrnél adod meg, az **Időszakos telephely** résznél. Akinek nincs saját
+telephelye, az a klub telephelyéről indul. A járműveknek nincs külön telephelyük: hogy a
+busz hol áll, arról a klub gondoskodik.
 
 > **Figyelem:** telephely nélkül a program úgy számol, mintha a sofőr két fuvar között
 > mindig hazamehetne. Távoli helyszínnél ez nem igaz, ezért a költség és a fizetett idő
 > pontatlan lesz. A Beosztás fül ilyenkor figyelmeztet.
+
+**Ha a járműveknél korábban saját telephelyet adtál meg**
+
+Régebben a telephelyet a járműnél lehetett megadni. Ha ilyen van, az **Adatok** és a
+**Beosztás** fülön ez a jelzés látszik: „… járműnek saját telephelye van. A telephely
+mostantól a sofőrhöz tartozik.” Amíg nem lépsz, a program a régi módon számol, semmi
+nem változik magától.
+
+1. Kattints az **Áthelyezés a sofőrökhöz** gombra.
+2. Nézd át a listát, mielőtt bármi változna:
+   - „Kisbusz 1 (Ásotthalom) → Kovács János”: a busz telephelyét az a sofőr kapja meg,
+     akinek ez a **saját (preferált) busza**. Ha ketten osztoznak egy buszon, mindketten.
+   - „… saját telephelye marad”: akinek már van telephelye, annál nem változik.
+   - „nincs sofőrje — a telephely elvész”: ezt a buszt senki nem jelölte saját buszának.
+     Ha a telephely egy sofőrhöz tartozik, előbb add meg nála kézzel ([5.5](#55-sofőrök)).
+   - „Saját telephely nélkül marad …”: ezek a sofőrök ezután a klub telephelyéről
+     indulnak, bármelyik buszt kapják.
+3. Ha minden rendben, kattints a **Jóváhagyás** gombra. A jelzés ezután eltűnik.
 
 ### 5.4 Járművek
 
@@ -171,10 +190,9 @@ telephelyet: ez akkor számít, ha a busz sofőrjének nincs saját telephelye.
    Két járműnek nem lehet ugyanaz a rendszáma.
 4. **Férőhelyek száma (sofőr nélkül) \*** – hány utas fér el. A sofőrt ne számold bele!
 5. **Van országos autópálya-matricája** – kapcsold be, ha van.
-6. **Telephely** – hagyd a „— a klub telephelye —” értéken, vagy válaszd ki, ahol a busz áll.
-   Ez csak akkor számít, ha a buszt vezető sofőrnek nincs saját telephelye (lásd
-   [5.5](#55-sofőrök)).
-7. **Megjegyzés** (nem kötelező), majd **Mentés**.
+6. **Megjegyzés** (nem kötelező), majd **Mentés**.
+
+A járműnek nincs telephelye: azt a sofőrnél adod meg (lásd [5.5](#55-sofőrök)).
 
 ### 5.5 Sofőrök
 
@@ -190,7 +208,7 @@ telephelyet: ez akkor számít, ha a busz sofőrjének nincs saját telephelye.
 | **Órabér (Ft/óra)** | A sofőr órabére. Alapértelmezés: 3000 Ft. |
 | **Min. műszak (perc)** | A legrövidebb idő, amit a klub egy kiállásért kifizet. Alapértelmezés: 180 perc (3 óra). |
 | **Elérhetőség** | Mikor osztható be a sofőr (lásd lent). |
-| **Telephely** | Ahonnan a sofőr a buszával indul, és ahova visszatér (lásd lent). Ha nincs megadva, a jármű telephelye számít. |
+| **Telephely** | Ahonnan a sofőr a buszával indul, és ahova visszatér (lásd lent). Ha nincs megadva, a klub telephelye számít. |
 | **Időszakos telephely** | Ha a sofőr bizonyos napokon, bizonyos időben máshonnan indul (lásd lent). |
 | **Megjegyzés** | Bármi, ami fontos. |
 
@@ -210,7 +228,7 @@ telephelyet: ez akkor számít, ha a busz sofőrjének nincs saját telephelye.
 **Telephely és időszakos telephely – ha a sofőr nem mindig ugyanonnan indul**
 
 A **Telephely** az a hely, ahonnan a sofőr a buszával általában indul (pl. az otthona).
-Ha nincs megadva, a jármű telephelye számít, ha annak sincs, a klubé. A sofőr telephelye
+Ha nincs megadva, a klub telephelye számít. A sofőr telephelye
 **vele megy**: ha egy napra másik buszt kap (például mert a sajátja mérkőzésre megy),
 akkor is a saját telephelyéről indul.
 
@@ -230,7 +248,7 @@ Hogyan számol vele a program?
 - A **kiállás** annál a telephelynél kezdődik, amelyik az **induláskor** érvényes; a
   **beállás** annál ér véget, amelyik a **visszaérkezéskor**. A kettő lehet különböző: a busz
   délután a munkahelyről indul, este pedig hazaér.
-- Ha egy idősáv sem érvényes, a fenti **Telephely** számít (ha az sincs, a járműé, végül a klubé).
+- Ha egy idősáv sem érvényes, a fenti **Telephely** számít (ha az sincs, a klubé).
 - Ha az indulás épp az idősáv vége után van, de a busz onnan már nem érhetne haza időben,
   akkor onnan indul, ahol az idősáv végén volt. Példa: a sofőr **16:00-ig** dolgozik
   (idősáv: 00:00–16:00, munkahely), a **16:10-es** induláshoz a busz a **munkahelyről**
@@ -427,7 +445,7 @@ alapértéken.
 | **Preferált jármű súlya (Ft)** | Mennyire ragaszkodjon a sofőr saját buszához. 0 = nem számít. | 1000 |
 | **Egyenletes terhelés súlya (Ft)** | Mennyire ossza el egyenletesen a munkát a sofőrök között. 0 = csak a költség számít. | 5000 |
 | **Fix sofőr–jármű párosítás** | Bekapcsolva a sofőr **csak a saját (preferált) buszát** kaphatja meg; a program más járművet fel sem ajánl neki. Lásd a táblázat alatti dobozt. | kikapcsolva |
-| **Klub telephelye** | Innen indulnak a buszok, ha sem a sofőrnél, sem a járműnél nincs más megadva. | nincs megadva |
+| **Klub telephelye** | Innen indul a sofőr a buszával, ha nincs saját telephelye megadva. | nincs megadva |
 
 > **Mennyi legyen a kiszállási díj?**
 >
@@ -860,8 +878,8 @@ Alapból a saját busz csak előny, nem szabály. Ha ragaszkodsz hozzá, kapcsol
 a **Fix sofőr–jármű párosítást** (lásd [7.2](#72-paraméterek-)).
 
 **A busz rossz helyről indul a beosztásban.**
-Nézd meg a sofőrnél a **Telephely** és az **Időszakos telephely** beállítását, és ha ott
-nincs megadva, a járműnél a **Telephelyet**. Az idősáv a
+Nézd meg a sofőrnél a **Telephely** és az **Időszakos telephely** beállítását; ha ott
+nincs megadva, a klub telephelye számít (⚙ panel). Az idősáv a
 busz **indulási** idejére vonatkozik (amikor elhagyja a telephelyet), nem az első megálló
 idejére.
 

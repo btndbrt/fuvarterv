@@ -93,10 +93,14 @@ describe("a telephely hiánya nem maradhat némán", () => {
     expect(container.textContent).not.toContain("hazamehet");
   });
 
-  test("a jármű saját telephelye is elég", () => {
+  /* Still enough for the arithmetic, so no missing-depot warning. Since ADR-32 the
+     depot belongs to the driver, so the only standing warning is the offer to move
+     it there. */
+  test("a jármű saját telephelye is elég, csak az áthelyezést ajánlja fel", () => {
     mount(makeState({ bases: [KLUB], vehicleBase: "h1" }));
-    expect(btn("figyelmeztetés")).toBeFalsy();
+    expect(openWarnings().textContent).toContain("1 figyelmeztetés");
     expect(container.textContent).not.toContain("hazamehet");
+    expect(btn("Áthelyezés a sofőrökhöz")).toBeTruthy();
   });
 });
 

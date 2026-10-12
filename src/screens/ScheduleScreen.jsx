@@ -9,11 +9,12 @@ import { DAYS, uid, byId } from "../domain/constants.js";
 import { mondayOf, weekdayIdx, minToTime, fmtDateFull, toISO } from "../domain/datetime.js";
 import { locName, matrixKey, computeMatrix } from "../domain/geo.js";
 import { resolveDay, dayStats, optimizeWeek, pairingIssue, withGeneratedRides, handRidesReplaced, driverAvailableFor, driverPay, chainUse, depotLegs, chainShifts } from "../domain/optimizer.js";
-import { baseOf, driverHasBase } from "../domain/logic.js";
+import { baseOf, driverHasBase, depotMigrationPlan } from "../domain/logic.js";
 import { fmtFt, fmtH } from "../ui/format.js";
 import { Field, NumField, Check, Modal, PlateChip, TeamDot, EmptyState, InfoDot, BusyOverlay } from "../ui/base.jsx";
 import { VignettePill } from "../ui/VignettePill.jsx";
 import { driversWithWeekWork } from "./PrintSheets.jsx";
+import { DepotMigrationBanner } from "./DepotMigration.jsx";
 
 /* ---------- Schedule ---------- */
 
@@ -507,10 +508,12 @@ export function ScheduleScreen({ state, update }) {
           „{state.bases[0].name}” beállítása klubtelephelynek
         </button>
       ) : (
-        <div className="mt-1">Válaszd ki a klub telephelyét a ⚙ panelben, vagy add meg a járműveknél vagy a sofőröknél.</div>
+        <div className="mt-1">Válaszd ki a klub telephelyét a ⚙ panelben, vagy add meg a sofőröknél.</div>
       )}
     </div>
   );
+  /* Buses that still carry a depot from before it moved to the driver (ADR-32). */
+  if (depotMigrationPlan(state)) warnings.push(<DepotMigrationBanner key="depot-move" state={state} update={update} />);
   res.skipped.forEach((sk, i) => warnings.push(
     <div key={`sk${i}`} className="banner banner-warn"><AlertTriangle size={16} />{sk}</div>
   ));
@@ -547,7 +550,7 @@ export function ScheduleScreen({ state, update }) {
           <Check label="Fix sofőr–jármű párosítás"
             hint="Bekapcsolva a sofőr csak a saját (preferált) buszát kaphatja meg, a többi járművet az optimalizálás fel sem ajánlja neki. Akinek nincs saját busza, azt nem érinti; két sofőrnek lehet ugyanaz a busza. Kivételt kézi áthelyezéssel és zárolással tehetsz."
             checked={state.settings.fixedVehicle} onChange={(v) => setSetting("fixedVehicle", v)} />
-          <Field label="Klub telephelye" hint="Innen indulnak a buszok, ha sem a sofőrnél, sem a járműnél nincs saját telephely megadva. A fizetett idő a telephelytől a visszaérkezésig tart.">
+          <Field label="Klub telephelye" hint="Innen indul a sofőr a buszával, ha nincs saját telephelye megadva. A fizetett idő a telephelytől a visszaérkezésig tart.">
             <select className="inp" value={state.settings.defaultBaseId || ""} onChange={(e) => setSetting("defaultBaseId", e.target.value || null)}>
               <option value="">— nincs megadva —</option>
               {state.bases.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}

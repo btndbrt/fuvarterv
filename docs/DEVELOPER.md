@@ -473,11 +473,14 @@ station (coordinate mandatory in the editor), but never selectable as a stop.
 ```js
 { id, name, plate, seats, note,
   hasVignette: boolean,                  // national motorway vignette
-  baseId: id|null }                      // null = settings.defaultBaseId
+  baseId: id|null }                      // LEGACY: cleared by the depot move
 ```
-`plate` is normalized; `seats` excludes the driver. The vehicle's `baseId` is the
-depot for runs whose driver has none of their own (see **Driver** below), and for runs
-with no registered driver.
+`plate` is normalized; `seats` excludes the driver. A vehicle has no depot of its own
+any more (ADR-32); the depot is the driver's. `baseId` survives only in data saved
+before that: the lookup still reads it, just before the club depot, until the
+dispatcher approves the move (`depotMigrationPlan` / `applyDepotMigration`), which
+gives it to the bus's own drivers and sets it to `null`. The vehicle form no longer
+shows it. Never write a non-null value to it.
 
 **Driver** (`drivers[]`)
 ```js
@@ -501,12 +504,14 @@ and takes that to whichever bus they are given. `baseRules` says where the drive
 starts from at a given weekday and time, when that is not always the same place — at
 the office until 16:00, at home afterwards. The windows are shaped like availability,
 half-open (`[start, end)`), and the first matching one wins. Lookup order: the driver's
-window, the driver's `baseId`, the vehicle's `baseId`, `settings.defaultBaseId`.
+window, the driver's `baseId`, the vehicle's legacy `baseId` (until moved),
+`settings.defaultBaseId`. A run with no registered driver goes straight to the
+vehicle's legacy depot, then the club's.
 **Never resolve a depot by hand**: `baseAt(state, use, min)` answers "where is the run's
 depot at this moment", and `startBaseOf(state, use)` / `endBaseOf(state, use)` in
 `logic.js` answer "which depot does this occupancy leave from / return to" (see
 [§10.5](#105-assign-real-drivers-and-buses--assignresources)). A use names its driver,
-vehicle and weekday; `baseOf` (vehicle, then club) is only the last fallback.
+vehicle and weekday; `baseOf` (legacy vehicle depot, then club) is only the last fallback.
 
 **Training** (`trainings[]`) — when a team trains.
 ```js
@@ -691,8 +696,8 @@ To detect clashes, each ride is reduced to a **time window** it occupies:
 `deleteGuard(state, kind, id)` returns a Hungarian "in use" message (or `null` if
 safe to delete). E.g. you can't quietly delete a station that teams or rides still
 reference. The UI uses this to warn before deletion. A depot counts as referenced by a
-vehicle's `baseId`, by a driver's `baseId` or any of their `baseRules`, and by
-`settings.defaultBaseId`.
+driver's `baseId` or any of their `baseRules`, by `settings.defaultBaseId`, and by a
+vehicle's legacy `baseId` until it is moved.
 
 ---
 
@@ -1113,7 +1118,7 @@ one of them has a fallback.
 | `preferredBias` | Extra cost (Ft) charged when a driver is put on a bus other than their preferred one. 0 disables the preference. | 1000 |
 | `fixedVehicle` | `true` makes `preferredVehicleId` a hard rule: a driver who has one is only ever offered that bus. Locks still override it. `false` keeps it a soft preference priced by `preferredBias` (ADR-31). | false |
 | `runCostPerMin` | Cost (Ft) of one minute of **empty** running: fuel and wear on a bus carrying nobody. Charged on depot trips and deadheads, and what stops the optimizer driving the bus home between two runs. 0 makes empty mileage free again. | 100 |
-| `defaultBaseId` | The club's depot — where a run starts and ends when neither its driver (`baseId`, `baseRules`) nor its bus (`baseId`) has a depot. `null` means no depot is known, and paid time falls back to spanning the tasks only. | null |
+| `defaultBaseId` | The club's depot — where a run starts and ends when its driver has no depot of their own (`baseId`, `baseRules`), and for runs with no registered driver. `null` means no depot is known, and paid time falls back to spanning the tasks only. | null |
 
 ---
 

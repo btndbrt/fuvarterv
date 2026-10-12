@@ -336,6 +336,51 @@ export function endBaseOf(state, u) {
 export const driverHasBase = (driver) =>
   !!driver?.baseId || (driver?.baseRules || []).some((r) => ruleSpan(r));
 
+/* ---------- Moving bus depots to drivers (ADR-32) ----------
+   The depot used to live on the bus. It now goes with the driver, but data saved
+   before that still has depots on buses, and they keep working through the lookup's
+   last-but-one step (baseOf) until the dispatcher moves them. This is that move.
+
+   It is never done on load: ensureShape runs on every load, so a move there would
+   reprice the schedule with nobody watching (E8), and would put back a depot the
+   dispatcher had since cleared. Instead it is a plan the dispatcher reads and
+   approves once.
+
+   A bus's depot goes to each driver whose own bus (preferredVehicleId) it is — shift
+   partners both get it. A driver who already has a depot keeps theirs. A bus with no
+   such driver is listed as orphaned, and the drivers still left without a depot are
+   listed too, because from then on they start from the club's. Null when no bus has
+   a depot, which is also the state after the move. */
+export function depotMigrationPlan(state) {
+  const buses = state.vehicles.filter((v) => v.baseId);
+  if (!buses.length) return null;
+  const moves = [], kept = [], orphaned = [];
+  for (const v of buses) {
+    const owners = state.drivers.filter((d) => d.preferredVehicleId === v.id);
+    if (!owners.length) orphaned.push({ vehicleId: v.id, baseId: v.baseId });
+    for (const d of owners) {
+      if (d.baseId) kept.push({ driverId: d.id, vehicleId: v.id, baseId: d.baseId });
+      else moves.push({ driverId: d.id, vehicleId: v.id, baseId: v.baseId });
+    }
+  }
+  const moved = new Set(moves.map((m) => m.driverId));
+  const toClub = state.drivers.filter((d) => !d.baseId && !moved.has(d.id)).map((d) => d.id);
+  return { moves, kept, orphaned, toClub };
+}
+
+/* The approved move, as one new state: drivers get their depots and every bus's is
+   cleared, so the plan afterwards is null and the banner goes away for good. */
+export function applyDepotMigration(state) {
+  const plan = depotMigrationPlan(state);
+  if (!plan) return state;
+  const to = new Map(plan.moves.map((m) => [m.driverId, m.baseId]));
+  return {
+    ...state,
+    drivers: state.drivers.map((d) => (to.has(d.id) ? { ...d, baseId: to.get(d.id) } : d)),
+    vehicles: state.vehicles.map((v) => (v.baseId ? { ...v, baseId: null } : v)),
+  };
+}
+
 /* The one bus this driver may be given, or null when any bus will do.
 
    Only with settings.fixedVehicle on, and only for a driver whose preferred bus

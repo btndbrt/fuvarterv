@@ -681,9 +681,11 @@ departure leaves from the workplace, a 17:00 one from home.
 they drive. A driver gets an all-day `baseId` and a list of weekly windows shaped like
 their availability: `baseRules: [{ days, start, end, baseId }]`. A window is half-open
 and the first match wins. Lookup order for a run: the driver's window, the driver's
-`baseId`, the vehicle's `baseId`, `settings.defaultBaseId`. A run with no registered
-driver (a driverless chain, or a free-text match driver later) starts from the bus's
-depot. The start depot is resolved when the bus **leaves**, the end depot when it
+`baseId`, `settings.defaultBaseId`. A run with no registered driver (a driverless
+chain, or a free-text match driver later) starts from the club depot. The bus has no
+depot of its own any more: where the bus is, is the club's business, not the
+optimizer's (the dispatcher's words). The vehicle's old `baseId` is read only as a
+legacy step before the club depot, until it is moved (below). The start depot is resolved when the bus **leaves**, the end depot when it
 **gets back**, and the two may differ.
 
 **Why on the driver.** A first version put the windows on the vehicle, on the grounds
@@ -727,8 +729,30 @@ with neither every resolution is `baseOf`'s — the four existing depot test fil
 unchanged. A use with no `weekday` gets the all-day fallback. An older client ignores
 both fields and plans with the vehicle's depot, which is the behaviour it always had.
 
+**Moving the bus depots, once, with approval.** The club's live data has buses with a
+depot of their own. Dropping the field would reprice their schedule silently, so the
+lookup keeps reading it until the dispatcher moves it. The move is never done on load:
+`ensureShape` runs on every load, so it would both reprice with nobody watching and put
+back a depot the dispatcher had since cleared. Instead, while any bus has a depot, the
+Data and Schedule screens show a banner. Its preview (`depotMigrationPlan`) lists each
+change: the bus's depot goes to every driver whose own bus (`preferredVehicleId`) it
+is; a driver who already has a depot keeps it; a bus nobody owns is listed as losing
+its depot; and the drivers left with none are named, since they start from the club's
+from then on. Approval (`applyDepotMigration`) writes the drivers' depots and clears
+every `vehicle.baseId` in one save, so the banner never returns. This is the one place
+a stored value is cleared rather than only added to, and it happens only by the user's
+explicit action. A driver who keeps their own bus leaves from the same depot before
+and after (tested).
+
 **Rejected.** Windows on the vehicle — the first version of this ADR, never merged.
 Same resolution, wrong owner: see "Why on the driver".
+
+**Rejected.** Keeping the bus's depot as a permanent step between the driver's and the
+club's. It would keep two places to set the same thing, and a depot nobody remembers
+setting on a bus would quietly win over the club's. The club depot already covers
+"a driver with no depot of their own".
+
+**Rejected.** Moving the depots silently in `ensureShape`. See above.
 
 **Rejected.** A per-date override ("on 12 March he is at X"). Useful for one-offs, but
 the dispatcher's cases are weekly patterns, and dated exceptions are their own feature
@@ -739,8 +763,11 @@ and arrival. Simpler, since there is no circularity, but it answers a different 
 from the one the dispatcher asks: "for a 16:10 departure, where does the bus leave
 from?" is about when the bus leaves.
 
-**Where.** `baseAt`, `startBaseOf`, `endBaseOf`, `driverHasBase` in `logic.js`;
+**Where.** `baseAt`, `startBaseOf`, `endBaseOf`, `driverHasBase`,
+`depotMigrationPlan`, `applyDepotMigration` in `logic.js`; `DepotMigrationBanner` in
+`screens/DepotMigration.jsx`;
 `depotLegs`, `spanOf`, `homeTripMin`, `chainUse`, `rideUse` and `genDayTasks`
 (`task.weekday`) in `optimizer.js`; the depot picker and window editor in the driver
 form of `MasterScreen` (`WindowList`, shared with availability). Tests:
-`base-rules.test.js`, `base-rules-ui.test.jsx`.
+`base-rules.test.js`, `base-rules-ui.test.jsx`, `depot-migration.test.js`,
+`depot-migration-ui.test.jsx`.

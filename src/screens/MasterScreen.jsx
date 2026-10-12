@@ -7,6 +7,7 @@ import { normalizePlate, plateExists, deleteGuard } from "../domain/logic.js";
 import { Field, Check, Modal, DangerBtn, PlateChip, EmptyState } from "../ui/base.jsx";
 import { MapPickerModal } from "../ui/MapPicker.jsx";
 import { VignettePill } from "../ui/VignettePill.jsx";
+import { DepotMigrationBanner } from "./DepotMigration.jsx";
 
 /* ---------- Master data ---------- */
 export const MASTER_TABS = [
@@ -38,6 +39,7 @@ export function MasterScreen({ tab, state, update, notice, setNotice }) {
       </div>
 
       {notice && <div className="banner banner-warn mb-3"><AlertTriangle size={18} />{notice}</div>}
+      {(tab === "vehicles" || tab === "drivers" || tab === "bases") && <DepotMigrationBanner state={state} update={update} />}
 
       <div className="flex flex-col gap-2">
         {items.map((it) => (
@@ -204,12 +206,6 @@ export function MasterForm({ kind, state, entity, onSave, onCancel }) {
           <Check label="Van országos autópálya-matricája"
             hint="Matricás helyszínre a beosztás csak ilyen járművet oszt be."
             checked={f.hasVignette} onChange={(b) => setF({ ...f, hasVignette: b })} />
-          <Field label="Telephely" hint="Innen indul és ide tér vissza a busz, ha a sofőrjének nincs saját telephelye — a fizetett idő ettől a ponttól számít.">
-            <select className="inp" value={f.baseId || ""} onChange={(e) => setF({ ...f, baseId: e.target.value || null })}>
-              <option value="">— a klub telephelye —</option>
-              {state.bases.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-            </select>
-          </Field>
         </>
       )}
       {kind === "drivers" && (
@@ -237,9 +233,9 @@ export function MasterForm({ kind, state, entity, onSave, onCancel }) {
             <WindowList items={f.availability || []} onChange={(availability) => setF({ ...f, availability })}
               addLabel="Idősáv hozzáadása" blank={() => ({ days: [], start: "15:00", end: "21:00" })} />
           </Field>
-          <Field label="Telephely" hint="Innen indul és ide tér vissza a sofőr a buszával — bármelyik buszt kapja. Ha nincs megadva, a jármű telephelye számít, ha annak sincs, a klubé.">
+          <Field label="Telephely" hint="Innen indul és ide tér vissza a sofőr a buszával — bármelyik buszt kapja. Ha nincs megadva, a klub telephelye számít.">
             <select className="inp" aria-label="A sofőr telephelye" value={f.baseId || ""} onChange={(e) => setF({ ...f, baseId: e.target.value || null })}>
-              <option value="">— a jármű telephelye —</option>
+              <option value="">— a klub telephelye —</option>
               {state.bases.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
             </select>
           </Field>
