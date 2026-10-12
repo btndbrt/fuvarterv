@@ -9,11 +9,12 @@ import { DAYS, uid, byId } from "../domain/constants.js";
 import { mondayOf, weekdayIdx, minToTime, fmtDateFull, toISO } from "../domain/datetime.js";
 import { locName, matrixKey, computeMatrix } from "../domain/geo.js";
 import { resolveDay, dayStats, optimizeWeek, pairingIssue, withGeneratedRides, handRidesReplaced, driverAvailableFor, driverPay, chainUse, depotLegs, chainShifts } from "../domain/optimizer.js";
-import { baseOf } from "../domain/logic.js";
+import { driversWithoutBase, depotMigrationPlan } from "../domain/logic.js";
 import { fmtFt, fmtH } from "../ui/format.js";
 import { Field, NumField, Check, Modal, PlateChip, TeamDot, EmptyState, InfoDot, BusyOverlay } from "../ui/base.jsx";
 import { VignettePill } from "../ui/VignettePill.jsx";
 import { driversWithWeekWork } from "./PrintSheets.jsx";
+import { DepotMigrationBanner } from "./DepotMigration.jsx";
 
 /* ---------- Schedule ---------- */
 
@@ -111,8 +112,9 @@ export function ChainCard({ state, chain: c, place, onLock, onMove, onToggleChai
   const { pay, chains: inShift, first, last, gap } = place || solo;
   const { paid, cost, shifts } = pay;
   const span = shifts[0];
-  /* Derived here, not stored on the chain: the depot comes from the vehicle (or
-     the club default), so it follows a change of either with nothing to migrate. */
+  /* Derived here, not stored on the chain: the depot comes from the driver, the
+     vehicle or the club default, so it follows a change of any with nothing to
+     migrate. */
   const legs = depotLegs(state, use);
   const fromBase = span && (span.start !== c.start || span.end !== c.end);
   return (
@@ -163,7 +165,7 @@ export function ChainCard({ state, chain: c, place, onLock, onMove, onToggleChai
             on site, never a trip home. Drawing the depot legs per chain put the bus
             back at the depot in the middle of the afternoon, with times that
             overlapped the trip it was still making. */}
-        {legs && first && <DepotLine state={state} leg={legs.out} kind="out" />}
+        {legs?.out && first && <DepotLine state={state} leg={legs.out} kind="out" />}
         {gap && (
           <div className="linkline" title="A busz a helyszínen marad — nincs idő hazamenni">
             <ChevronsRight size={13} />
@@ -186,7 +188,7 @@ export function ChainCard({ state, chain: c, place, onLock, onMove, onToggleChai
             )}
           </div>
         ))}
-        {legs && last && <DepotLine state={state} leg={legs.back} kind="back" />}
+        {legs?.back && last && <DepotLine state={state} leg={legs.back} kind="back" />}
       </div>
     </div>
   );
@@ -472,8 +474,8 @@ export function ScheduleScreen({ state, update }) {
   const setSetting = (k, v) => update((s) => ({ ...s, settings: { ...s.settings, [k]: v } }));
 
   const moveChainId = moveTask ? (res.chains.find((c) => c.tasks.some((t) => t.id === moveTask.id))?.id || null) : null;
-  /* Vehicles with no resolvable depot: neither their own nor the club's. */
-  const baseless = state.vehicles.filter((v) => !baseOf(state, v.id));
+  /* Drivers the depot lookup finds nothing for (ADR-32: the depot is the driver's). */
+  const baseless = driversWithoutBase(state);
 
   /* Every STANDING warning about the day, gathered into one collapsible list so the
      chains start at the top of the screen instead of below a stack of banners.
@@ -490,7 +492,7 @@ export function ScheduleScreen({ state, update }) {
     <div key="baseless" className="banner banner-warn" style={{ display: "block" }}>
       <div className="flex items-center gap-2">
         <AlertTriangle size={16} />
-        <b>{baseless.length === state.vehicles.length ? "Egy járműnek sincs telephelye" : `${baseless.length} járműnek nincs telephelye`}</b>
+        <b>{baseless.length === state.drivers.length ? "Egy sofőrnek sincs telephelye" : `${baseless.length} sofőrnek nincs telephelye: ${baseless.map((d) => d.name).join(", ")}`}</b>
       </div>
       <div className="mt-1">
         Enélkül a beosztás úgy számol, hogy a sofőr két fuvar között hazamehet — távoli helyszínnél ez nem igaz,
@@ -503,10 +505,12 @@ export function ScheduleScreen({ state, update }) {
           „{state.bases[0].name}” beállítása klubtelephelynek
         </button>
       ) : (
-        <div className="mt-1">Válaszd ki a klub telephelyét a ⚙ panelben, vagy add meg a járműveknél.</div>
+        <div className="mt-1">Válaszd ki a klub telephelyét a ⚙ panelben, vagy add meg a sofőröknél.</div>
       )}
     </div>
   );
+  /* Buses that still carry a depot from before it moved to the driver (ADR-32). */
+  if (depotMigrationPlan(state)) warnings.push(<DepotMigrationBanner key="depot-move" state={state} update={update} />);
   res.skipped.forEach((sk, i) => warnings.push(
     <div key={`sk${i}`} className="banner banner-warn"><AlertTriangle size={16} />{sk}</div>
   ));
@@ -543,7 +547,7 @@ export function ScheduleScreen({ state, update }) {
           <Check label="Fix sofőr–jármű párosítás"
             hint="Bekapcsolva a sofőr csak a saját (preferált) buszát kaphatja meg, a többi járművet az optimalizálás fel sem ajánlja neki. Akinek nincs saját busza, azt nem érinti; két sofőrnek lehet ugyanaz a busza. Kivételt kézi áthelyezéssel és zárolással tehetsz."
             checked={state.settings.fixedVehicle} onChange={(v) => setSetting("fixedVehicle", v)} />
-          <Field label="Klub telephelye" hint="Innen indulnak a buszok, ha a járműnél nincs saját telephely megadva. A fizetett idő a telephelytől a visszaérkezésig tart.">
+          <Field label="Klub telephelye" hint="Innen indul a sofőr a buszával, ha nincs saját telephelye megadva. A fizetett idő a telephelytől a visszaérkezésig tart.">
             <select className="inp" value={state.settings.defaultBaseId || ""} onChange={(e) => setSetting("defaultBaseId", e.target.value || null)}>
               <option value="">— nincs megadva —</option>
               {state.bases.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}

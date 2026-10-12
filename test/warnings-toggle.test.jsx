@@ -83,7 +83,7 @@ describe("the schedule's warnings open from one button", () => {
     click(toggle());
     expect(banners()).toHaveLength(4);                     // the toggle plus its three
     expect(container.textContent).toContain("nincs állomás rendelve");
-    expect(container.textContent).toContain("sincs telephelye");   // „Egy járműnek sincs telephelye”
+    expect(container.textContent).toContain("sincs telephelye");   // „Egy sofőrnek sincs telephelye”
     expect(toggle().getAttribute("aria-expanded")).toBe("true");
 
     click(toggle());
