@@ -105,12 +105,13 @@ flat config (`npm run lint`). See [§19](#19-tests).
 ```
 .
 ├── index.html                ← HTML entry; loads /src/main.jsx + the Nunito font
-├── package.json              ← deps + scripts (dev / build / preview / test / lint)
+├── package.json              ← deps + scripts (dev / dev:local / build / preview / test / lint)
 ├── vite.config.js            ← Vite config (React + Tailwind) and the vitest block
 ├── eslint.config.js          ← flat ESLint config (react + react-hooks)
 ├── netlify.toml              ← build, SPA redirect and security headers for Netlify
 ├── netlify/functions/        ← the one piece of server code (invite links, ADR-30)
 ├── run-local.sh              ← one-command local setup (installs Node if needed)
+├── local-data/               ← snapshot for `npm run dev:local` (git-ignored but for its README)
 ├── .env.example              ← template for the two required env vars
 ├── .env                      ← your real Supabase keys (git-ignored)
 ├── README.md                 ← short overview + setup steps
@@ -125,6 +126,9 @@ flat config (`npm run lint`). See [§19](#19-tests).
 │   └── setup.js              ← IS_REACT_ACT_ENVIRONMENT for the smoke test
 ├── src/
 │   ├── main.jsx              ← React entry; renders <AuthGate><App/></AuthGate>
+│   │                            (or <LocalShell> in local test mode)
+│   ├── LocalShell.jsx        ← local test mode: no login, admin, the HELYI TESZT bar
+│   ├── localStorageShim.js   ← local test mode: window.storage on a file + localStorage
 │   ├── index.css             ← just: @import "tailwindcss";
 │   ├── App.jsx               ← navigation, state, debounced saving
 │   ├── AuthGate.jsx          ← login, session, stale/save-error UI, error boundary
@@ -185,8 +189,10 @@ would make the two circular.
 Follow the chain of events from page load to a working app:
 
 1. **The browser loads `index.html`**, which loads `src/main.jsx`.
-2. **`main.jsx` runs.** It imports `AuthGate` and `App`, and renders
-   `<React.StrictMode><AuthGate><App/></AuthGate></React.StrictMode>`.
+2. **`main.jsx` runs.** It imports `App`, imports `AuthGate` dynamically, and renders
+   `<React.StrictMode><AuthGate><App/></AuthGate></React.StrictMode>`. In local test mode
+   (`vite --mode offline`, see [Run locally](#run-locally)) it imports `LocalShell` and
+   installs the local `window.storage` instead, and never imports `AuthGate`.
 3. **Importing `AuthGate.jsx` has a side effect:** at the top of the file, it does
    `window.storage = supabaseStorage`. This happens at import time — **before any
    component renders** — so `window.storage` is guaranteed to exist before the app
@@ -1190,6 +1196,26 @@ npm install && npm run dev
 
 Then open http://localhost:5173, log in with a user created in the Supabase
 dashboard, and the app loads (seeding sample data on the very first save).
+
+**Local test mode** (`npm run dev:local`) runs on a snapshot of the live data with no
+Supabase at all; the steps are in `local-data/README.md`. How it is kept away from the
+live data:
+
+- `main.jsx` picks `LocalShell` over `AuthGate` when `import.meta.env.MODE` is
+  `"offline"`. The mode is named that because Vite rejects `local` as a mode name: it
+  clashes with the `.env.local` suffix. A production build has `MODE` `"production"`,
+  so the local branch is dead code there and `LocalShell` is not in the bundle.
+- `supabaseClient.js` reports `isConfigured = false` in that mode even if `.env` holds
+  the live credentials, so features that need the server (users, invites, saved
+  versions) show their "no connection" state instead of reaching the live project.
+- `localStorageShim.js` implements `window.storage`: the first read parses
+  `local-data/state.json` (the bare blob, an `app_state` row, or the SQL editor's array
+  of rows), and every save goes to localStorage under `fuvarterv-local:`. A missing
+  file gives an empty workspace; a malformed one is an error, not an empty workspace.
+- The script binds the dev server to `127.0.0.1`. `vite.config.js` has `host: true`,
+  which would otherwise serve the snapshot, with its personal data, to the whole LAN.
+  `npm run dev:local:lan` (`--host 0.0.0.0`) is the explicit opt-in for testing on a
+  phone; `test/local-mode.test.js` keeps the default on localhost.
 
 ### Deploy to Netlify
 

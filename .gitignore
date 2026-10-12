@@ -4,3 +4,7 @@ dist
 .env
 .env.local
 .env.*.local
+
+# Local test mode: snapshots of the live data (real names, phone numbers).
+local-data/*
+!local-data/README.md
