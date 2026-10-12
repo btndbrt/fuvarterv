@@ -13,7 +13,7 @@ import { DAYS, byId, uid } from "./constants.js";
 import { timeToMin, minToTime, weekdayIdx, toISO, addDays } from "./datetime.js";
 import { legMin, locName } from "./geo.js";
 import { weekOccurrences, legFor, legSource, taskNeedsVignette, chainNeedsVignette, vignetteVenues, startBaseOf, endBaseOf, driverHasBase, rideWindow, fixedVehicleOf, vehicleAllowedFor,
-  isMatch, matchesOn, datedPlan, storedChains, withStoredChains, rideOnDate } from "./logic.js";
+  isMatch, matchBuses, matchesOn, datedPlan, storedChains, withStoredChains, rideOnDate } from "./logic.js";
 
 /* Held-Karp: the shortest order that visits every station.
    pre/post pin a point before/after the chain (typically the venue);
@@ -165,9 +165,12 @@ export function genDayTasks(state, weekday, weekMon) {
     const t = o.training, team = byId(state.teams, t.teamId);
     if (!team) continue;
     const suffix = t.type === "weekly" ? weekday : "x";
-    /* A match goes on its one bus (ADR-33): never split, and a team that does not
-       fit is flagged on the match chain instead. */
+    /* A match (ADR-33) is split across ITS buses, so the split follows their seats —
+       the smallest of them, so every group fits every bus — and not the fleet's. */
     const match = isMatch(t);
+    const matchSeats = match ? matchBuses(t).map((b) => Number(byId(state.vehicles, b.vehicleId)?.seats) || 0).filter((n) => n > 0) : [];
+    const seatCap = matchSeats.length ? Math.min(...matchSeats) : maxSeats;
+    const capWhat = matchSeats.length ? `a mérkőzés buszainak férőhelyét (${seatCap} fő)` : `a legnagyobb jármű férőhelyét (${seatCap} fő)`;
     const teamLabel = perTeam[t.teamId] > 1 ? `${team.name} · ${locName(state, t.venueId)}` : team.name;
 
     /* One pass per direction. The return leg may have its own stops and its own
@@ -253,16 +256,16 @@ export function genDayTasks(state, weekday, weekMon) {
       const counted = st.reduce((a, sid) => a + cnt(sid), 0);
       const missing = Math.max(0, pax - counted);
       const uncounted = st.filter((sid) => !(cnt(sid) > 0));
-      const bins = !match && maxSeats > 0 && pax > maxSeats ? splitStationsByCapacity(st, cnt, maxSeats, missing) : null;
+      const bins = seatCap > 0 && pax > seatCap ? splitStationsByCapacity(st, cnt, seatCap, missing) : null;
       const orphans = `${who}: a megállónkénti létszámok összege (${counted} fő) kevesebb, mint a teljes létszám (${pax} fő), és nincs üresen hagyott megálló, ahová a maradék ${missing} fő tartozhatna`;
       if (bins && bins.length > 1) {
-        const splitStops = st.filter((sid) => cnt(sid) > maxSeats);
-        skipped.push(`${who}: a ${pax} fős létszám meghaladja a legnagyobb jármű férőhelyét (${maxSeats} fő), ezért ${bins.length} buszra bontva, megállónként.`
+        const splitStops = st.filter((sid) => cnt(sid) > seatCap);
+        skipped.push(`${who}: a ${pax} fős létszám meghaladja ${capWhat}, ezért ${bins.length} buszra bontva, megállónként.`
           + (splitStops.length ? ` Több buszra osztott megálló: ${splitStops.map((sid) =>
             `${locName(state, sid)} (${bins.map((b) => b.stops.find((s) => s.id === sid)?.count).filter(Boolean).join(" + ")} fő)`).join(", ")}.` : ""));
         const names = `${uncounted.map((sid) => locName(state, sid)).join(", ")} ${uncounted.length > 1 ? "megállóknál" : "megállónál"}`;
-        if (uncounted.length && missing > maxSeats)
-          skipped.push(`${who}: ${names} nincs megadva létszám, és a rájuk eső ${missing} fő több, mint a legnagyobb jármű (${maxSeats} fő), ezért nem osztható buszokra — add meg a megállónkénti létszámokat.`);
+        if (uncounted.length && missing > seatCap)
+          skipped.push(`${who}: ${names} nincs megadva létszám, és a rájuk eső ${missing} fő több, mint ${matchSeats.length ? "egy mérkőzésbusz" : "a legnagyobb jármű"} (${seatCap} fő), ezért nem osztható buszokra — add meg a megállónkénti létszámokat.`);
         else if (uncounted.length)
           skipped.push(`${who}: ${names} nincs megadva létszám, ezért ${uncounted.length > 1 ? "ezek egy buszra kerültek" : "egy buszra került"}${missing ? ` a hiányzó ${missing} fővel` : ""} — add meg a megállónkénti létszámokat a pontos felosztáshoz.`);
         else if (missing)
@@ -272,11 +275,10 @@ export function genDayTasks(state, weekday, weekMon) {
         /* One bus is not a split. It happens when the counted stops fit one bus and
            only people WITHOUT a stop push the total over, so the task keeps the full
            total and stays uncovered rather than sending a bus too small for them. */
-        if (match) { /* flagged on the match chain, against the match's own bus */ }
-        else if (bins)
+        if (bins)
           skipped.push(`${orphans}, ezért a ${pax} fős feladatra nincs elég nagy jármű — javítsd a létszámokat.`);
-        else if (maxSeats > 0 && pax > maxSeats)
-          skipped.push(`${who}: a ${pax} fő meghaladja a legnagyobb jármű férőhelyét (${maxSeats} fő), de nincs megállónkénti létszámbontás, ezért nem osztható buszokra — add meg a megállónkénti létszámokat a felosztáshoz.`);
+        else if (seatCap > 0 && pax > seatCap)
+          skipped.push(`${who}: a ${pax} fő meghaladja ${capWhat}, de nincs megállónkénti létszámbontás, ezért nem osztható buszokra — add meg a megállónkénti létszámokat a felosztáshoz.`);
         tasks.push(mkTask(null));
       }
     }
@@ -905,23 +907,45 @@ export function contentionReasons(state, weekday, t) {
 }
 
 /* The day's match chains (ADR-33), derived from the trainings and never stored: one
-   per match, the match's tasks on its bus with its free-text driver, locked. No
-   driver record, so no wage and no fairness share. */
+   per match bus, each taking one group of the team out and back, with that bus's
+   free-text driver, locked. Group k of the outbound split and group k of the return
+   split go on bus k — the same pairing a single bus makes with the whole team. No
+   driver record, so no wage and no fairness share.
+
+   A group with no bus left (too few picked) still gets a chain, with no bus and a
+   red flag, so it cannot quietly drop out of the plan. A bus with no group (more
+   picked than needed) gets no chain, so it is not booked, and the first chain says
+   so. */
+const groupIdx = (t) => Number((/#(\d+)$/.exec(t.id) || [0, 1])[1]);
 function matchChainsOf(state, tasks) {
   const out = [];
   for (const tr of state.trainings.filter(isMatch)) {
     const ts = tasks.filter((t) => t.trainingId === tr.id);
     if (!ts.length) continue;
-    const c = mkChain(state, ts.map((t) => ({ ...t, locked: true })), {
-      id: `match:${tr.id}`, match: true, locked: true,
-      driverId: null, driverName: tr.match.driverName || "", vehicleId: tr.match.vehicleId,
-    });
-    c.vehicle = byId(state.vehicles, tr.match.vehicleId);
-    c.issues = [];
-    if (!c.vehicle) c.issues.push("A mérkőzés busza már nem létezik — válassz másikat az edzésnél.");
-    else if (c.maxPax > c.vehicle.seats)
-      c.issues.push(`Mérkőzés: a létszám (${c.maxPax} fő) meghaladja a(z) ${c.vehicle.plate} férőhelyét (${c.vehicle.seats}). Mérkőzésre nem bontjuk több buszra — válassz nagyobb buszt, vagy javítsd a létszámot.`);
-    out.push(c);
+    const buses = matchBuses(tr);
+    const groups = Math.max(...ts.map(groupIdx));
+    const mine = [];
+    for (let k = 1; k <= groups; k++) {
+      const bus = buses[k - 1] || null;
+      const gt = ts.filter((t) => groupIdx(t) === k);
+      if (!gt.length) continue;
+      const c = mkChain(state, gt.map((t) => ({ ...t, locked: true })), {
+        id: `match:${tr.id}:${k}`, match: true, locked: true,
+        driverId: null, driverName: bus?.driverName || "", vehicleId: bus?.vehicleId || null,
+      });
+      c.vehicle = bus ? byId(state.vehicles, bus.vehicleId) : undefined;
+      c.issues = [];
+      if (!bus)
+        c.issues.push(`Mérkőzés: a csapathoz ${groups} busz kell, de csak ${buses.length} van megadva — ennek a csoportnak (${c.maxPax} fő) nincs busza. Adj hozzá buszt az edzésnél.`);
+      else if (!c.vehicle) c.issues.push("A mérkőzés egyik busza már nem létezik — válassz másikat az edzésnél.");
+      else if (c.maxPax > c.vehicle.seats)
+        c.issues.push(`Mérkőzés: a létszám (${c.maxPax} fő) meghaladja a(z) ${c.vehicle.plate} férőhelyét (${c.vehicle.seats}). Adj hozzá buszt az edzésnél, vagy javítsd a létszámot.`);
+      mine.push(c);
+    }
+    const spare = buses.slice(groups).map((b) => byId(state.vehicles, b.vehicleId)?.plate).filter(Boolean);
+    if (spare.length && mine.length)
+      mine[0].issues.push(`Mérkőzés: a csapat ${groups} buszon elfér, ezért ${spare.join(", ")} nem kell — nincs lefoglalva, más fuvarra beosztható.`);
+    out.push(...mine);
   }
   return out;
 }
@@ -931,7 +955,7 @@ function matchChainsOf(state, tasks) {
    they get their own bus back whenever it is free. */
 export function matchDayState(state, weekday, weekMon) {
   if (!weekMon || !state.settings?.fixedVehicle) return state;
-  const buses = new Set(matchesOn(state, toISO(addDays(weekMon, weekday))).map((t) => t.match.vehicleId));
+  const buses = new Set(matchesOn(state, toISO(addDays(weekMon, weekday))).flatMap((t) => matchBuses(t).map((b) => b.vehicleId)));
   if (!buses.size) return state;
   return { ...state, drivers: state.drivers.map((d) => (buses.has(d.preferredVehicleId) ? { ...d, matchRelaxed: true } : d)) };
 }

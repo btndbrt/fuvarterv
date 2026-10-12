@@ -4,7 +4,7 @@
 import { AlertTriangle, MapPin, Clock, ChevronsRight, Lock } from "lucide-react";
 import { byId } from "../domain/constants.js";
 import { minToTime, mondayOf } from "../domain/datetime.js";
-import { findRides, findConflicts, venueDepartMin, isMatch } from "../domain/logic.js";
+import { findRides, findConflicts, venueDepartMin, isMatch, matchBuses } from "../domain/logic.js";
 import { rideLocked } from "../domain/optimizer.js";
 import { PlateChip } from "./base.jsx";
 import { timeToMin } from "../domain/datetime.js";
@@ -18,8 +18,7 @@ export function OccCard({ state, occ, onOpen }) {
      training's dated rides stand in for the template's (ADR-33). */
   const rides = findRides(state, training, occ.dayIdx, occ.dateISO);
   const weekMon = occ.dateISO ? mondayOf(occ.dateISO) : null;
-  const match = isMatch(training) ? training.match : null;
-  const matchBus = match ? byId(state.vehicles, match.vehicleId) : null;
+  const match = isMatch(training) ? matchBuses(training) : null;
 
   return (
     <button onClick={onOpen} className="card w-full text-left p-0 overflow-hidden flex" style={{ cursor: "pointer" }}>
@@ -32,12 +31,15 @@ export function OccCard({ state, occ, onOpen }) {
             ? <span className="text-xs pill disp" style={{ background: "var(--acc)", color: "#fff" }}>MÉRKŐZÉS</span>
             : training.type === "once" && <span className="text-xs pill" style={{ background: "var(--paper2)", color: "var(--ink2)" }}>egyszeri</span>}
         </div>
-        {match && (
-          <div className="flex items-center gap-2 text-sm mt-1 flex-wrap">
-            {matchBus && <PlateChip plate={matchBus.plate} />}
-            <span className="font-medium">{match.driverName || "nincs sofőr megadva"}</span>
-          </div>
-        )}
+        {match && match.map((b, i) => {
+          const v = byId(state.vehicles, b.vehicleId);
+          return (
+            <div key={i} className="flex items-center gap-2 text-sm mt-1 flex-wrap">
+              {v && <PlateChip plate={v.plate} />}
+              <span className="font-medium">{b.driverName || "nincs sofőr megadva"}</span>
+            </div>
+          );
+        })}
         <div className="flex items-center gap-1 text-sm mt-1" style={{ color: "var(--ink2)" }}>
           <MapPin size={14} /> <span className="truncate">{venue?.name || "nincs helyszín"}</span>
         </div>

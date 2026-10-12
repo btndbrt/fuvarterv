@@ -523,9 +523,10 @@ vehicle and weekday; `baseOf` (legacy vehicle depot, then club) is only the last
   date: "YYYY-MM-DD" | null,             // for "once"
   start: "HH:MM", end: "HH:MM",
 
-  // A match (ADR-33), only on a "once" training: the bus that takes the team and a
-  // free-text driver (coach or parent, no user record). null = an ordinary training.
-  match: null | { vehicleId, driverName: string },
+  // A match (ADR-33), only on a "once" training: the buses that take the team, each
+  // with a free-text driver (coach or parent, no user record). A team bigger than one
+  // bus is split by stops across them. null = an ordinary training.
+  match: null | { buses: [ { vehicleId, driverName: string } ] },
 
   // null = use the team's stop list (the pre-feature behaviour).
   // An object = this training has a complete list of its own.

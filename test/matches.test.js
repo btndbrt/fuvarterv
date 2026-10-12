@@ -11,9 +11,10 @@ import {
 } from "../src/domain/optimizer.js";
 
 /*
- * Matches (ADR-33): a one-off training marked as a match, with a bus and a free-text
- * driver (a coach or a parent — no user record). The bus picks the team up from its
- * stops like a training, and is blocked for the match window. The plan of a match
+ * Matches (ADR-33): a one-off training marked as a match, with one or more buses, each
+ * with a free-text driver (a coach or a parent — no user record). The buses pick the
+ * team up from its stops like a training, the team split across them by stops when it
+ * does not fit one, and each bus is blocked for the match window. The plan of a match
  * DATE is stored per date (dateAssignments), so the weekly template every other week
  * uses stays as it was.
  */
@@ -33,7 +34,8 @@ const team = (id, pax, stop = "s0") => ({
   returnStationCounts: {}, returnRouteAnchorId: null,
 });
 const MATCH = { id: "trM", teamId: "tmM", venueId: "vM", type: "once", days: [], date: MATCH_DATE,
-  start: "10:00", end: "12:00", stops: null, match: { vehicleId: "A", driverName: "Kiss edző" } };
+  start: "10:00", end: "12:00", stops: null, match: { buses: [{ vehicleId: "A", driverName: "Kiss edző" }] } };
+const withBuses = (...buses) => ({ ...MATCH, match: { buses } });
 const WEEKLY = { id: "trW", teamId: "tm", venueId: "v0", type: "weekly", days: [SAT], date: null,
   start: "10:30", end: "11:30", stops: null, match: null };
 
@@ -65,11 +67,17 @@ describe("data model", () => {
     expect(seedState().dateAssignments).toEqual({});
   });
 
-  test("only a one-off training with a bus is a match", () => {
+  test("only a one-off training with at least one bus is a match", () => {
     expect(isMatch(MATCH)).toBe(true);
     expect(isMatch({ ...MATCH, match: null })).toBe(false);
-    expect(isMatch({ ...MATCH, match: { vehicleId: "", driverName: "x" } })).toBe(false);
+    expect(isMatch({ ...MATCH, match: { buses: [] } })).toBe(false);
+    expect(isMatch({ ...MATCH, match: { buses: [{ vehicleId: "", driverName: "x" }] } })).toBe(false);
     expect(isMatch({ ...WEEKLY, match: MATCH.match })).toBe(false);
+  });
+
+  test("a match saved with a single bus (the first draft's shape) loads as a one-bus list", () => {
+    const s = ensureShape({ trainings: [{ ...MATCH, match: { vehicleId: "A", driverName: "Kiss edző" } }] });
+    expect(s.trainings[0].match).toEqual({ buses: [{ vehicleId: "A", driverName: "Kiss edző" }] });
   });
 
   test("matchesOn lists the matches of one date", () => {
@@ -79,11 +87,17 @@ describe("data model", () => {
 });
 
 describe("the match chain", () => {
-  test("the team goes on the match bus whole, never split, even when it does not fit", () => {
-    const s = makeState({ matchPax: 12 });
-    const legs = genDayTasks(s, SAT, WEEK_MON).tasks.filter((t) => t.trainingId === "trM");
+  test("a team that fits one match bus goes whole", () => {
+    const legs = genDayTasks(makeState(), SAT, WEEK_MON).tasks.filter((t) => t.trainingId === "trM");
     expect(legs.map((t) => t.dir).sort()).toEqual(["oda", "vissza"]);
-    expect(legs.every((t) => t.match && t.pax === 12)).toBe(true);
+    expect(legs.every((t) => t.match && t.pax === 6)).toBe(true);
+  });
+
+  test("a bigger team is split by stops to the match buses' seats", () => {
+    const s = makeState({ matchPax: 12, match: withBuses({ vehicleId: "A", driverName: "Kiss edző" }, { vehicleId: "B", driverName: "Szülő" }) });
+    const legs = genDayTasks(s, SAT, WEEK_MON).tasks.filter((t) => t.trainingId === "trM");
+    expect(legs.length).toBe(4);
+    expect(legs.every((t) => t.match && t.pax <= 8)).toBe(true);
   });
 
   test("resolveDay derives it: the match bus, no driver, the free-text name, locked", () => {
@@ -94,10 +108,27 @@ describe("the match chain", () => {
     expect(r.unassigned.some((t) => t.trainingId === "trM")).toBe(false);
   });
 
-  test("a team bigger than the bus is flagged on the match chain, not split", () => {
-    const m = matchChain(resolveDay(makeState({ matchPax: 12 }), SAT, WEEK_MON));
-    expect(m.issues.join(" ")).toContain("12 fő");
-    expect(m.issues.join(" ")).toContain("A-100");
+  test("each match bus gets one group, out and back, with its own driver", () => {
+    const s = makeState({ matchPax: 12, match: withBuses({ vehicleId: "A", driverName: "Kiss edző" }, { vehicleId: "B", driverName: "Szülő" }) });
+    const ms = resolveDay(s, SAT, WEEK_MON).chains.filter((c) => c.match);
+    expect(ms.map((c) => [c.vehicleId, c.driverName])).toEqual([["A", "Kiss edző"], ["B", "Szülő"]]);
+    expect(ms.every((c) => c.tasks.map((t) => t.dir).sort().join() === "oda,vissza")).toBe(true);
+    expect(ms.reduce((a, c) => a + Math.max(...c.tasks.filter((t) => t.dir === "oda").map((t) => t.pax)), 0)).toBe(12);
+    expect(ms.flatMap((c) => c.issues)).toEqual([]);
+  });
+
+  test("too few buses: the group left without one is flagged, saying how many are needed", () => {
+    const ms = resolveDay(makeState({ matchPax: 12 }), SAT, WEEK_MON).chains.filter((c) => c.match);
+    expect(ms.length).toBe(2);
+    const orphan = ms.find((c) => !c.vehicleId);
+    expect(orphan.issues.join(" ")).toContain("2 busz kell");
+  });
+
+  test("a bus the team does not need is flagged, and is not booked", () => {
+    const s = makeState({ match: withBuses({ vehicleId: "A", driverName: "Kiss edző" }, { vehicleId: "B", driverName: "Szülő" }) });
+    const ms = resolveDay(s, SAT, WEEK_MON).chains.filter((c) => c.match);
+    expect(ms.map((c) => c.vehicleId)).toEqual(["A"]);
+    expect(ms[0].issues.join(" ")).toContain("B-100");
   });
 
   test("it earns nothing: no paid time, no cost", () => {
@@ -134,6 +165,13 @@ describe("the optimizer on a match date", () => {
     const late = { ...WEEKLY, id: "trL", start: "17:00", end: "18:00" };
     const out = optimizeDay(makeState({ trainings: [late] }), SAT, WEEK_MON);
     expect(out.chains.find((c) => !c.match)).toMatchObject({ driverId: "d1", vehicleId: "A" });
+  });
+
+  test("every match bus is booked: with two buses at the match, the weekly task gets the third", () => {
+    const s = makeState({ matchPax: 12, vehicles: [bus("A"), bus("B"), bus("C")],
+      match: withBuses({ vehicleId: "A", driverName: "Kiss edző" }, { vehicleId: "B", driverName: "Szülő" }) });
+    const out = optimizeDay(s, SAT, WEEK_MON);
+    expect(out.chains.filter((c) => !c.match).map((c) => c.vehicleId)).toEqual(["C"]);
   });
 
   test("an uncovered task says the match has the bus", () => {

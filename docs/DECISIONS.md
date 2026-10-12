@@ -43,7 +43,7 @@ Unless a record says otherwise, the decision is **still in force**.
 | [ADR-30](#adr-30--one-privileged-function-for-invitations) | Invitations | security |
 | [ADR-31](#adr-31--fixed-driverbus-pairing-is-a-switch-not-a-bigger-bias) | Fixed pairing | optimisation |
 | [ADR-32](#adr-32--the-depot-goes-with-the-driver-and-can-depend-on-the-day-and-the-time) | Driver depot, time-dependent | optimisation |
-| [ADR-33](#adr-33--a-match-is-a-one-off-training-with-its-own-bus-and-its-date-gets-its-own-plan) | Matches, dated plans | data model |
+| [ADR-33](#adr-33--a-match-is-a-one-off-training-with-its-own-buses-and-its-date-gets-its-own-plan) | Matches, dated plans | data model |
 
 ---
 
@@ -784,7 +784,7 @@ form of `MasterScreen` (`WindowList`, shared with availability). Tests:
 `depot-migration-ui.test.jsx`, `driver-base-warning.test.jsx`.
 
 
-## ADR-33 — A match is a one-off training with its own bus, and its date gets its own plan
+## ADR-33 — A match is a one-off training with its own buses, and its date gets its own plan
 
 **Context.** The dispatcher asked for two linked things. Coaches take a bus to matches,
 sometimes with a parent driving, who should not need a user account. And on such a day
@@ -793,18 +793,24 @@ that day", which the app could not express: the schedule was a weekly template t
 every week reuses, so any change made for one Saturday became every Saturday's plan.
 
 **Decision.**
-- **The match.** A one-off training gains `match: null | { vehicleId, driverName }`.
-  Only a one-off training with a bus is a match (`isMatch`). Its legs are generated
-  from the team's stops like any training's, but never split across buses (the
-  dispatcher's choice): a team that does not fit is flagged on the match chain.
-- **The match chain** is derived from the training every time (`resolveDay`), never
-  stored: the match's tasks, on its bus, `driverId: null`, the free-text
-  `driverName`, locked. It cannot be locked, unlocked or moved on the Schedule screen.
+- **The match.** A one-off training gains
+  `match: null | { buses: [{ vehicleId, driverName }] }`. Only a one-off training with
+  at least one bus is a match (`isMatch`, `matchBuses`). Its legs are generated from the
+  team's stops like any training's; a team bigger than one bus is split by stops
+  (`splitStationsByCapacity`), to the seats of the **match's** buses — the smallest of
+  them, so every group fits every bus — not the fleet's largest. Bigger teams go to
+  matches on several buses (the dispatcher's answer).
+- **The match chains** are derived from the training every time (`resolveDay`), never
+  stored: one per bus, group *k* out and back on bus *k*, `driverId: null`, that bus's
+  free-text `driverName`, locked. Too few buses: the group without one still gets a
+  chain, with no bus and a red flag saying how many are needed. Too many: the spare bus
+  gets no chain, so it is not booked, and the first chain says it is not needed. A
+  match chain cannot be locked, unlocked or moved on the Schedule screen.
   No driver record means no wage, no turn-out fee, no fairness share: `dayStats`
   skips it and `optimizeWeek` leaves it out of the shares.
-- **The bus** is booked for the match window, depot runs included: `optimizeDay`
-  hands the match chain to `assignResources` as fixed occupancy, so the ordinary
-  clash check keeps every other chain off it. Before and after, the bus is free.
+- **The buses** are booked for the match window, depot runs included: `optimizeDay`
+  hands the match chains to `assignResources` as fixed occupancy, so the ordinary
+  clash check keeps every other chain off them. Before and after, they are free.
 - **The bus's own driver.** On a match date, a driver whose fixed bus (ADR-31) is at a
   match may be given any bus (`matchDayState` sets `matchRelaxed`, which
   `fixedVehicleOf` reads). The soft preference still applies, so they get their own
@@ -848,10 +854,14 @@ could drift apart (a changed bus, a moved date) with nothing to say which is rig
 parents are free text; a real driver on a match can be handled as an ordinary
 training. It can be added later as an optional field.
 
-**Rejected.** Splitting a big team across buses for a match. The dispatcher's call:
-the match has one bus, and a team that does not fit is a data problem to flag.
+**Rejected.** One bus per match, with an oversized team flagged. The first draft did
+this; the dispatcher then said bigger teams go on several buses. The single-bus shape
+`{ vehicleId, driverName }` it saved is read by `ensureShape` as a one-bus list.
 
-**Where.** `isMatch`, `matchesOn`, `datedPlan`, `storedChains`, `withStoredChains`,
+**Rejected.** Letting the optimizer pick the match buses. The dispatcher picks them,
+because the coach or parent who drives is tied to a particular bus.
+
+**Where.** `isMatch`, `matchBuses`, `matchesOn`, `datedPlan`, `storedChains`, `withStoredChains`,
 `rideOnDate`, `ridesShareADay` in `logic.js`; `matchChainsOf`, `matchDayState`,
 `applyWeek` and the match handling in `genDayTasks`, `resolveDay`, `optimizeDay`,
 `dayStats`, `ridesFromChains` in `optimizer.js`; the match fields in `TrainingForm`,

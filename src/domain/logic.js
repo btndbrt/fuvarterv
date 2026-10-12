@@ -35,13 +35,15 @@ export function weekOccurrences(state, mon) {
 
 
 /* ---------- Matches (ADR-33) ----------
-   A match is a one-off training marked with the bus that takes the team and a
-   free-text driver (a coach or a parent, who has no user record):
+   A match is a one-off training marked with the buses that take the team, each with
+   a free-text driver (a coach or a parent, who has no user record):
 
-     training.match: null | { vehicleId, driverName }
+     training.match: null | { buses: [{ vehicleId, driverName }] }
 
-   Only a one-off training with a bus counts; anything else reads as no match. */
-export const isMatch = (t) => !!(t && t.type === "once" && t.match?.vehicleId);
+   Only a one-off training with at least one bus counts; anything else reads as no
+   match. matchBuses skips a row whose bus was never picked. */
+export const matchBuses = (t) => (t?.match?.buses || []).filter((b) => b.vehicleId);
+export const isMatch = (t) => !!(t && t.type === "once" && matchBuses(t).length);
 export const matchesOn = (state, dateISO) =>
   state.trainings.filter((t) => isMatch(t) && t.date === dateISO);
 export const isMatchDate = (state, dateISO) => matchesOn(state, dateISO).length > 0;
@@ -543,8 +545,8 @@ export function deleteGuard(state, kind, id) {
       // A deleted preferred vehicle penalises its driver forever: offPreferred
       // stays true for every bus, so preferredBias hides that driver for good.
       + state.drivers.filter((d) => d.preferredVehicleId === id).length
-      // A match without its bus would silently stop being a match (isMatch).
-      + state.trainings.filter((t) => t.match?.vehicleId === id).length;
+      // A match without its bus would silently lose a bus, or stop being a match.
+      + state.trainings.filter((t) => (t.match?.buses || []).some((b) => b.vehicleId === id)).length;
     return n(c, "fuvar/beosztás/sofőr/mérkőzés");
   }
   if (kind === "bases") {

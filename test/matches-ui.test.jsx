@@ -36,7 +36,7 @@ const bus = (id) => ({ id, name: `Busz ${id}`, plate: `${id}-100`, seats: 8, has
 const TEAM = { id: "tmM", name: "U19", color: "#c00", stationIds: ["s1"], venueIds: ["vM"], passengerCount: null,
   stationCounts: { s1: 6 }, routeMode: "auto", routeAnchorId: null, returnStationIds: null, returnStationCounts: {}, returnRouteAnchorId: null };
 const MATCH = { id: "trM", teamId: "tmM", venueId: "vM", type: "once", days: [], date: TODAY, start: "10:00", end: "12:00", stops: null,
-  match: { vehicleId: "A", driverName: "Kiss edző" } };
+  match: { buses: [{ vehicleId: "A", driverName: "Kiss edző" }] } };
 
 function makeState(extra = {}) {
   return {
@@ -57,10 +57,30 @@ describe("the training form", () => {
     const saved = [];
     render(<TrainingForm state={makeState()} team={TEAM} training={once} onSave={(x) => saved.push(x)} onCancel={() => {}} />);
     act(() => checkbox("Mérkőzés").click());
-    setValue(container.querySelector('select[aria-label="A mérkőzés busza"]'), "B");
-    setValue(container.querySelector('input[aria-label="A mérkőzés sofőrje"]'), "Kovács (szülő)");
+    setValue(container.querySelector('select[aria-label="1. busz"]'), "B");
+    setValue(container.querySelector('input[aria-label="1. busz sofőrje"]'), "Kovács (szülő)");
     click(btn("Mentés"));
-    expect(saved[0].match).toEqual({ vehicleId: "B", driverName: "Kovács (szülő)" });
+    expect(saved[0].match).toEqual({ buses: [{ vehicleId: "B", driverName: "Kovács (szülő)" }] });
+  });
+
+  test("more buses can be added, each with its own driver, and removed again", () => {
+    const saved = [];
+    render(<TrainingForm state={makeState()} team={TEAM} training={once} onSave={(x) => saved.push(x)} onCancel={() => {}} />);
+    act(() => checkbox("Mérkőzés").click());
+    click(btn("Busz hozzáadása"));
+    click(btn("Busz hozzáadása"));
+    setValue(container.querySelector('select[aria-label="2. busz"]'), "B");
+    setValue(container.querySelector('input[aria-label="2. busz sofőrje"]'), "Szülő");
+    click(btn("3. busz törlése"));
+    click(btn("Mentés"));
+    expect(saved[0].match.buses).toEqual([{ vehicleId: "A", driverName: "" }, { vehicleId: "B", driverName: "Szülő" }]);
+  });
+
+  test("it says how many buses the team needs", () => {
+    const big = { ...TEAM, stationCounts: { s1: 20 } };
+    render(<TrainingForm state={makeState({ teams: [big] })} team={big} training={MATCH} onSave={() => {}} onCancel={() => {}} />);
+    expect(container.textContent).toContain("20 fő");
+    expect(container.textContent).toContain("3 busz");
   });
 
   test("unticking it saves an ordinary one-off training", () => {
@@ -83,11 +103,11 @@ describe("the training form", () => {
 });
 
 describe("the week card", () => {
-  test("marks the match with its bus and driver, also before it has rides", () => {
-    render(<OccCard state={makeState()} occ={{ training: MATCH, dayIdx: WD, dateISO: TODAY }} onOpen={() => {}} />);
+  test("marks the match with each bus and driver, also before it has rides", () => {
+    const two = { ...MATCH, match: { buses: [{ vehicleId: "A", driverName: "Kiss edző" }, { vehicleId: "B", driverName: "Szülő" }] } };
+    render(<OccCard state={makeState({ trainings: [two] })} occ={{ training: two, dayIdx: WD, dateISO: TODAY }} onOpen={() => {}} />);
     expect(container.textContent).toContain("MÉRKŐZÉS");
-    expect(container.textContent).toContain("A-100");
-    expect(container.textContent).toContain("Kiss edző");
+    for (const x of ["A-100", "Kiss edző", "B-100", "Szülő"]) expect(container.textContent).toContain(x);
   });
 
   test("a match ride shows its free-text driver", () => {

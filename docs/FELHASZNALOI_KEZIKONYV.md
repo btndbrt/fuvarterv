@@ -409,29 +409,35 @@ kit melyik buszra tegyen, és ezt a Beosztás fül figyelmeztetésként jelzi.
 
 ### 6.9 Mérkőzés
 
-Mérkőzésre egy kijelölt busz viszi a csapatot, és gyakran nem a klub sofőrje vezeti, hanem
-az edző vagy egy szülő. Ehhez nem kell felhasználót létrehozni.
+Mérkőzésre egy vagy több kijelölt busz viszi a csapatot, és gyakran nem a klub sofőrje
+vezeti, hanem az edző vagy egy szülő. Ehhez nem kell felhasználót létrehozni.
 
 **Felvétel:**
 
 1. Vegyél fel a csapatnál egy **Egyszeri** edzést a mérkőzés napjára és idejére, a
    mérkőzés helyszínével ([6.6](#66-edzések-felvétele)).
 2. Pipáld be a **Mérkőzés** mezőt.
-3. **Busz \*** – melyik busz viszi a csapatot.
-4. **Sofőr** – az edző vagy a szülő neve, szabadon beírva (pl. „Kiss edző”). Üresen is
-   hagyhatod.
+3. **1. busz \*** – melyik busz viszi a csapatot, és mellette a **Sofőr**: az edző vagy a
+   szülő neve, szabadon beírva (pl. „Kiss edző”). Üresen is hagyhatod.
+4. Ha a csapat nem fér el egy buszon, a **Busz hozzáadása** gombbal vegyél fel még
+   buszt, mindegyikhez a saját sofőrjével. Az űrlap kiírja, hány busz kell
+   („A csapat 23 fő, egy buszra 8 fér, ezért legalább 3 busz kell”). Egy buszt az
+   **×** gombbal törölhetsz.
 5. **Mentés**.
 
 **Mit csinál vele a program?**
 
-- A busz a csapatot **a megállóiból** veszi fel, és oda is viszi vissza, ugyanúgy, mint
-  egy edzésre. A mérkőzésre a csapat **egy buszon** megy: ha nem fér be, a Beosztás
-  fülön piros jelzést kapsz („Mérkőzés: a létszám … meghaladja …”) – válassz nagyobb
-  buszt, vagy javítsd a létszámot.
-- A busz **a mérkőzés idejére** (a telephelyről indulástól a visszaérkezésig) senki
-  másnak nem osztható be. Előtte és utána szabad.
-- Ha be van kapcsolva a **Fix sofőr–jármű párosítás**, a busz saját sofőrje **aznap
-  másik buszt is kaphat** a napi fuvarjaihoz. Ha a saját busza szabad (pl. a mérkőzés
+- A buszok a csapatot **a megállóiból** veszik fel, és oda is viszik vissza, ugyanúgy,
+  mint egy edzésre. Ha több busz van, a program a csapatot **megállónként** osztja szét
+  közöttük (mint a [6.8](#68-ha-nem-fér-be-mindenki-egy-buszba) részben): minden busz a saját
+  csoportját viszi oda és vissza.
+- Ha **kevesebb** buszt adtál meg, mint amennyi kell, a Beosztás fülön piros jelzést
+  kapsz („Mérkőzés: a csapathoz 3 busz kell, de csak 2 van megadva …”). Ha **több**
+  buszt, a felesleges busz nincs lefoglalva, és ezt is jelzi a program.
+- A buszok **a mérkőzés idejére** (a telephelyről indulástól a visszaérkezésig) senki
+  másnak nem oszthatók be. Előtte és utána szabadok.
+- Ha be van kapcsolva a **Fix sofőr–jármű párosítás**, a mérkőzésre ment busz saját
+  sofőrje **aznap másik buszt is kaphat** a napi fuvarjaihoz. Ha a saját busza szabad (pl. a mérkőzés
   után), a program azt adja neki.
 - Ha emiatt egy feladat fedetlen marad, az indoklás megmondja: „Mérkőzés: a(z) … között
   mérkőzésre visz …”.
@@ -443,8 +449,8 @@ az edző vagy egy szülő. Ehhez nem kell felhasználót létrehozni.
 
 **Hol látszik?**
 
-- A **Hét** fülön a kártyán **MÉRKŐZÉS** címke, a busz rendszáma és a sofőr neve.
-- A **Beosztás** fülön külön kártya: „Mérkőzés · Kiss edző”. Ezt nem lehet zárolni vagy
+- A **Hét** fülön a kártyán **MÉRKŐZÉS** címke, és minden busz rendszáma a sofőr nevével.
+- A **Beosztás** fülön minden mérkőzésbusznak külön kártyája van: „Mérkőzés · Kiss edző”. Ezt nem lehet zárolni vagy
   áthelyezni – a busz vagy a sofőr módosításához szerkeszd az edzést.
 - A **Sofőr** fülön és a nyomtatott menetrenden nem jelenik meg, mert a mérkőzés
   sofőrje nem a klub sofőrje.
@@ -671,7 +677,7 @@ A **Hét** fül a hét **összes edzését** mutatja, napokra bontva, csapatszí
 
 **Egy edzés kártyáján:**
 - az edzés időpontja, a csapat neve, a helyszín (egyszeri edzésnél „egyszeri” címke,
-  mérkőzésnél **MÉRKŐZÉS** címke a busz rendszámával és a sofőr nevével);
+  mérkőzésnél **MÉRKŐZÉS** címke a buszok rendszámával és a sofőrök nevével);
 - alatta minden **fuvar** egy sorban: **ODA/VISSZA**, rendszám, sofőr, indulási idő.
 
 **Jelzések a kártyán:**
