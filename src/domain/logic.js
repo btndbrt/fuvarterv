@@ -34,9 +34,69 @@ export function weekOccurrences(state, mon) {
 
 
 
-/* One training session can have several rides: more than one bus carrying the team. */
-export function findRides(state, training, dayIdx) {
-  return state.rides.filter((r) => r.trainingId === training.id && (training.type !== "weekly" || r.day === dayIdx));
+/* ---------- Matches (ADR-33) ----------
+   A match is a one-off training marked with the bus that takes the team and a
+   free-text driver (a coach or a parent, who has no user record):
+
+     training.match: null | { vehicleId, driverName }
+
+   Only a one-off training with a bus counts; anything else reads as no match. */
+export const isMatch = (t) => !!(t && t.type === "once" && t.match?.vehicleId);
+export const matchesOn = (state, dateISO) =>
+  state.trainings.filter((t) => isMatch(t) && t.date === dateISO);
+export const isMatchDate = (state, dateISO) => matchesOn(state, dateISO).length > 0;
+
+/* ---------- Where a day's plan is stored ----------
+   The schedule is a weekly template, assignments[weekday], which every week reuses.
+   A match DATE is the exception: the match takes a bus for that one day, and the
+   plan around it (another bus for that bus's driver, say) must not leak into every
+   other week. So a match date's plan is stored under its date:
+
+     dateAssignments: { "YYYY-MM-DD": { chains } }
+
+   A match date reads its dated plan once it has one, and the template until then —
+   so a freshly entered match first shows the usual plan with the clash flagged.
+   Every write on a match date goes to the dated plan. A dated plan whose date no
+   longer has a match is ignored: the day is ordinary again. */
+const dateOf = (weekMon, weekday) => toISO(addDays(weekMon, weekday));
+
+/* The date's own plan, or null when the date reads the template. */
+export function datedPlan(state, dateISO) {
+  if (!isMatchDate(state, dateISO)) return null;
+  return state.dateAssignments?.[dateISO] || null;
+}
+
+export function storedChains(state, weekday, weekMon) {
+  const dated = weekMon ? datedPlan(state, dateOf(weekMon, weekday)) : null;
+  return (dated || state.assignments?.[weekday])?.chains || [];
+}
+
+/* The match chain is derived from the training every time and is never stored. */
+export function withStoredChains(state, weekday, weekMon, chains) {
+  const keep = chains.filter((c) => !c.match);
+  const date = weekMon ? dateOf(weekMon, weekday) : null;
+  if (date && isMatchDate(state, date))
+    return { ...state, dateAssignments: { ...(state.dateAssignments || {}), [date]: { chains: keep } } };
+  return { ...state, assignments: { ...(state.assignments || {}), [weekday]: { chains: keep } } };
+}
+
+/* Does this ride show on this date? A one-off training's ride on its own date. A
+   weekly training's ride either belongs to the template (day set, no date) and shows
+   on every matching weekday — except a date with a plan of its own — or was written
+   for one match date (date set, day null) and shows there only. */
+export function rideOnDate(state, ride, training, dateISO) {
+  if (!training) return false;
+  if (training.type !== "weekly") return training.date === dateISO;
+  if (ride.date) return ride.date === dateISO;
+  return ride.day === weekdayIdx(dateISO) && !datedPlan(state, dateISO);
+}
+
+/* One training session can have several rides: more than one bus carrying the team.
+   With a date, the rides that show on that date; without one, the template's. */
+export function findRides(state, training, dayIdx, dateISO = null) {
+  const dated = training.type === "weekly" && dateISO && datedPlan(state, dateISO);
+  return state.rides.filter((r) => r.trainingId === training.id
+    && (training.type !== "weekly" || (dated ? r.date === dateISO : r.day === dayIdx && !r.date)));
 }
 
 /* Departure time from the venue on a return leg: training end plus the margin. */
@@ -72,12 +132,25 @@ export function rideWindow(state, ride, training) {
    driver sees on their phone and what they are handed on paper must be the same
    list, in the same order, or the sheet is worse than useless. */
 export function driverDayRides(state, driverId, dateISO) {
-  const wd = weekdayIdx(dateISO);
   return state.rides
     .filter((r) => r.driverId === driverId)
     .map((r) => ({ ride: r, training: byId(state.trainings, r.trainingId) }))
-    .filter(({ ride, training }) => training && (training.type === "weekly" ? ride.day === wd : training.date === dateISO))
+    .filter(({ ride, training }) => rideOnDate(state, ride, training, dateISO))
     .sort((a, b) => rideWindow(state, a.ride, a.training)[0] - rideWindow(state, b.ride, b.training)[0]);
+}
+
+/* Can these two rides ever show on the same date? The date-aware version of
+   occursOnSameDay: a template ride and a ride written for one match date never do,
+   because on that date the template steps aside. */
+export function ridesShareADay(state, rA, tA, rB, tB) {
+  const dateOf1 = (r, t) => (t.type === "weekly" ? r.date || null : t.date || null);
+  const dA = dateOf1(rA, tA), dB = dateOf1(rB, tB);
+  if (dA && dB) return dA === dB;
+  if (!dA && !dB) return occursOnSameDay(rA, tA, rB, tB);
+  /* One is dated, the other a template ride: they meet on the dated one's date if
+     the template still shows there. */
+  const [dated, rT, tT] = dA ? [dA, rB, tB] : [dB, rA, tA];
+  return rideOnDate(state, rT, tT, dated);
 }
 
 export function occursOnSameDay(rA, tA, rB, tB) {
@@ -100,7 +173,7 @@ export function findConflicts(state, cand) {
     if (r.id === cand.id) continue;
     const tB = byId(state.trainings, r.trainingId);
     if (!tB) continue;
-    if (!occursOnSameDay(cand, tA, r, tB)) continue;
+    if (!ridesShareADay(state, cand, tA, r, tB)) continue;
     const [a1, a2] = rideWindow(state, cand, tA);
     const [b1, b2] = rideWindow(state, r, tB);
     if (!(a1 < b2 && b1 < a2)) continue;
@@ -121,7 +194,7 @@ export const seatSum = (stops) => stops.reduce((a, s) => a + (Number(s.count) > 
    zero. */
 export function chainRefs(state, field, id) {
   let c = 0;
-  for (const day of Object.values(state.assignments || {}))
+  for (const day of [...Object.values(state.assignments || {}), ...Object.values(state.dateAssignments || {})])
     for (const ch of day?.chains || []) if (ch[field] === id) c++;
   return c;
 }
@@ -435,7 +508,9 @@ export function applyDepotMigration(state) {
    Two drivers may share one bus: nothing here is exclusive. The usual clash check
    is what keeps them off it at the same time. */
 export function fixedVehicleOf(state, driver) {
-  if (!state.settings?.fixedVehicle || !driver?.preferredVehicleId) return null;
+  /* matchRelaxed: set by optimizer.matchDayState on a match date for a driver whose
+     own bus is at the match, so they may be given another bus that day. */
+  if (!state.settings?.fixedVehicle || !driver?.preferredVehicleId || driver.matchRelaxed) return null;
   return byId(state.vehicles, driver.preferredVehicleId) ? driver.preferredVehicleId : null;
 }
 export const vehicleAllowedFor = (state, driver, vehicleId) => {
@@ -467,8 +542,10 @@ export function deleteGuard(state, kind, id) {
       + chainRefs(state, "vehicleId", id)
       // A deleted preferred vehicle penalises its driver forever: offPreferred
       // stays true for every bus, so preferredBias hides that driver for good.
-      + state.drivers.filter((d) => d.preferredVehicleId === id).length;
-    return n(c, "fuvar/beosztás/sofőr");
+      + state.drivers.filter((d) => d.preferredVehicleId === id).length
+      // A match without its bus would silently stop being a match (isMatch).
+      + state.trainings.filter((t) => t.match?.vehicleId === id).length;
+    return n(c, "fuvar/beosztás/sofőr/mérkőzés");
   }
   if (kind === "bases") {
     // settings.defaultBaseId has to be counted too. Delete the club depot and

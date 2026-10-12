@@ -8,7 +8,7 @@ import { Plus, Pencil, ChevronLeft, AlertTriangle, MapPin, ChevronsRight, Route 
 import { GENDERS, TEAM_COLORS, uid, byId } from "../domain/constants.js";
 import { DAYS, DAYS_SHORT } from "../domain/constants.js";
 import { fmtDate } from "../domain/datetime.js";
-import { Field, Modal, DangerBtn, TeamDot, EmptyState } from "../ui/base.jsx";
+import { Field, Check, Modal, DangerBtn, TeamDot, EmptyState } from "../ui/base.jsx";
 import { fmtDateFull, toISO } from "../domain/datetime.js";
 import { StopListEditor } from "./StopListEditor.jsx";
 
@@ -301,7 +301,15 @@ export function TrainingForm({ state, team, training, onSave, onCancel }) {
     teamId: team.id, venueId: teamVenues[0]?.id || "", type: "weekly",
     days: [], date: toISO(new Date()), start: "17:00", end: "18:30",
   });
-  const valid = f.venueId && f.start && f.end && (f.type === "weekly" ? f.days.length > 0 : !!f.date);
+  /* A match (ADR-33) is a one-off training with the bus that takes the team and a
+     free-text driver — a coach or a parent, who needs no user record. */
+  const isMatchOn = f.type === "once" && !!f.match;
+  const valid = f.venueId && f.start && f.end && (f.type === "weekly" ? f.days.length > 0 : !!f.date)
+    && (!isMatchOn || !!f.match.vehicleId);
+  const save = () => onSave({
+    ...f,
+    match: isMatchOn ? { vehicleId: f.match.vehicleId, driverName: (f.match.driverName || "").trim() } : null,
+  });
 
   return (
     <Modal title={training ? "Edzés szerkesztése" : "Új edzés"} onClose={onCancel}>
@@ -330,14 +338,34 @@ export function TrainingForm({ state, team, training, onSave, onCancel }) {
           </div>
         </Field>
       ) : (
-        <Field label="Dátum *"><input type="date" className="inp" value={f.date || ""} onChange={(e) => setF({ ...f, date: e.target.value })} /></Field>
+        <>
+          <Field label="Dátum *"><input type="date" className="inp" value={f.date || ""} onChange={(e) => setF({ ...f, date: e.target.value })} /></Field>
+          <Check label="Mérkőzés"
+            hint="A csapatot egy kijelölt busz viszi a megállóiból, és a busz a mérkőzés idejére senki másnak nem osztható be. A busz saját sofőrje aznap másik buszt kaphat."
+            checked={isMatchOn}
+            onChange={(on) => setF({ ...f, match: on ? { vehicleId: state.vehicles[0]?.id || "", driverName: "" } : null })} />
+          {isMatchOn && (
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Busz *">
+                <select className="inp" aria-label="A mérkőzés busza" value={f.match.vehicleId}
+                  onChange={(e) => setF({ ...f, match: { ...f.match, vehicleId: e.target.value } })}>
+                  {state.vehicles.map((v) => <option key={v.id} value={v.id}>{v.name} ({v.plate})</option>)}
+                </select>
+              </Field>
+              <Field label="Sofőr" hint="Edző vagy szülő — nem kell felhasználónak lennie.">
+                <input className="inp" aria-label="A mérkőzés sofőrje" value={f.match.driverName || ""}
+                  placeholder="pl. Kiss edző" onChange={(e) => setF({ ...f, match: { ...f.match, driverName: e.target.value } })} />
+              </Field>
+            </div>
+          )}
+        </>
       )}
       <div className="grid grid-cols-2 gap-3">
         <Field label="Kezdés *"><input type="time" className="inp" value={f.start} onChange={(e) => setF({ ...f, start: e.target.value })} /></Field>
         <Field label="Vége *"><input type="time" className="inp" value={f.end} onChange={(e) => setF({ ...f, end: e.target.value })} /></Field>
       </div>
       <div className="flex gap-2 mt-4">
-        <button className="btn btn-pri flex-1" disabled={!valid} onClick={() => onSave(f)}>Mentés</button>
+        <button className="btn btn-pri flex-1" disabled={!valid} onClick={save}>Mentés</button>
         <button className="btn btn-ghost" onClick={onCancel}>Mégse</button>
       </div>
     </Modal>
