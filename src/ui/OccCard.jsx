@@ -3,8 +3,8 @@
 
 import { AlertTriangle, MapPin, Clock, ChevronsRight, Lock } from "lucide-react";
 import { byId } from "../domain/constants.js";
-import { minToTime } from "../domain/datetime.js";
-import { findRides, findConflicts, venueDepartMin } from "../domain/logic.js";
+import { minToTime, mondayOf } from "../domain/datetime.js";
+import { findRides, findConflicts, venueDepartMin, isMatch, matchBuses } from "../domain/logic.js";
 import { rideLocked } from "../domain/optimizer.js";
 import { PlateChip } from "./base.jsx";
 import { timeToMin } from "../domain/datetime.js";
@@ -14,7 +14,11 @@ export function OccCard({ state, occ, onOpen }) {
   const { training } = occ;
   const team = byId(state.teams, training.teamId);
   const venue = byId(state.venues, training.venueId);
-  const rides = findRides(state, training, occ.dayIdx);
+  /* The rides of THIS date: on a match date with a plan of its own, a weekly
+     training's dated rides stand in for the template's (ADR-33). */
+  const rides = findRides(state, training, occ.dayIdx, occ.dateISO);
+  const weekMon = occ.dateISO ? mondayOf(occ.dateISO) : null;
+  const match = isMatch(training) ? matchBuses(training) : null;
 
   return (
     <button onClick={onOpen} className="card w-full text-left p-0 overflow-hidden flex" style={{ cursor: "pointer" }}>
@@ -23,8 +27,19 @@ export function OccCard({ state, occ, onOpen }) {
         <div className="flex items-center gap-2 flex-wrap">
           <span className="tnum text-lg">{training.start}–{training.end}</span>
           <span className="font-semibold truncate">{team?.name || "?"}</span>
-          {training.type === "once" && <span className="text-xs pill" style={{ background: "var(--paper2)", color: "var(--ink2)" }}>egyszeri</span>}
+          {match
+            ? <span className="text-xs pill disp" style={{ background: "var(--acc)", color: "#fff" }}>MÉRKŐZÉS</span>
+            : training.type === "once" && <span className="text-xs pill" style={{ background: "var(--paper2)", color: "var(--ink2)" }}>egyszeri</span>}
         </div>
+        {match && match.map((b, i) => {
+          const v = byId(state.vehicles, b.vehicleId);
+          return (
+            <div key={i} className="flex items-center gap-2 text-sm mt-1 flex-wrap">
+              {v && <PlateChip plate={v.plate} />}
+              <span className="font-medium">{b.driverName || "nincs sofőr megadva"}</span>
+            </div>
+          );
+        })}
         <div className="flex items-center gap-1 text-sm mt-1" style={{ color: "var(--ink2)" }}>
           <MapPin size={14} /> <span className="truncate">{venue?.name || "nincs helyszín"}</span>
         </div>
@@ -43,8 +58,8 @@ export function OccCard({ state, occ, onOpen }) {
             <div key={ride.id} className="flex items-center gap-2 mt-2 flex-wrap">
               <span className={`dirpill ${dir === "vissza" ? "v" : ""}`}>{dir === "oda" ? "ODA" : "VISSZA"}</span>
               {vehicle && <PlateChip plate={vehicle.plate} />}
-              <span className="text-sm font-medium truncate">{driver?.name || "?"}</span>
-              {rideLocked(state, ride, occ.dayIdx) && <Lock size={13} aria-label="zárolva" style={{ color: "var(--ink2)" }} />}
+              <span className="text-sm font-medium truncate">{driver?.name || ride.driverName || "?"}</span>
+              {rideLocked(state, ride, occ.dayIdx, weekMon) && <Lock size={13} aria-label="zárolva" style={{ color: "var(--ink2)" }} />}
               {depTime && (
                 <span className="text-sm tnum flex items-center gap-1" style={{ color: "var(--ink2)" }}>
                   <Clock size={14} /> {dir === "vissza" ? "indulás a helyszínről" : "indulás"} {depTime}

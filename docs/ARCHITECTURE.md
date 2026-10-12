@@ -160,6 +160,9 @@ driver with no `baseId` and no `baseRules` uses the bus's legacy depot, as every
 before driver depots existed, until the dispatcher approves moving it to the driver.
 Nothing is moved on load.
 
+A training with no `match` is an ordinary training, and with no match no date has a
+plan of its own, so every date reads the weekly template (ADR-33).
+
 *Why:* there is no schema version and no server-side migration, so an upgrade must never
 silently reprice a club's schedule.
 
@@ -297,6 +300,8 @@ erDiagram
     CHAIN }o--|| DRIVER : "driver"
     CHAIN }o--|| VEHICLE : "bus"
     CHAIN ||--o{ TASKREF : "taskIds (+ lock)"
+    DATEPLAN ||--o{ CHAIN : "per match date (dateAssignments)"
+    TRAINING }o--o| VEHICLE : "match bus (match.vehicleId)"
 ```
 
 Field-level shapes are in [`DEVELOPER.md`](DEVELOPER.md#7-the-data-model-the-single-json-blob).

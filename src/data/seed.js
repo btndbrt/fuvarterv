@@ -54,10 +54,20 @@ export function ensureShape(s) {
   /* stops === null means the training uses the team's stop list (the original
      single-list behaviour). An object means the training has its own complete list,
      using the same field names the team uses. */
-  s.trainings = (s.trainings || []).map((t) => ({ ...t, type: t.type || "weekly", days: t.days || [], date: t.date ?? null, stops: t.stops ?? null }));
+  /* match: null, or { buses: [{ vehicleId, driverName }] } on a one-off training that
+     is a match (ADR-33). Null is an ordinary training, which every training saved
+     before matches existed is. A single { vehicleId, driverName } — the shape of the
+     feature's first, never-merged draft — reads as a one-bus list. */
+  const matchShape = (m) => (!m ? null
+    : Array.isArray(m.buses) ? { ...m, buses: m.buses }
+    : { buses: m.vehicleId ? [{ vehicleId: m.vehicleId, driverName: m.driverName || "" }] : [] });
+  s.trainings = (s.trainings || []).map((t) => ({ ...t, type: t.type || "weekly", days: t.days || [], date: t.date ?? null, stops: t.stops ?? null, match: matchShape(t.match) }));
   s.rides = (s.rides || []).map((r) => ({ ...r, dir: r.dir || "oda", stops: r.stops || [] }));
   s.matrix = s.matrix || null;
   s.assignments = s.assignments || {};
+  /* A match date's own plan (ADR-33). Empty: every date reads the weekly template,
+     which is all there was before. */
+  s.dateAssignments = s.dateAssignments || {};
   return s;
 }
 
@@ -218,5 +228,6 @@ export function seedState() {
     settings: { ...DEFAULT_SETTINGS, defaultBaseId: "hZAK" },
     matrix: null,
     assignments: {},
+    dateAssignments: {},
   };
 }

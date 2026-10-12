@@ -43,6 +43,7 @@ Unless a record says otherwise, the decision is **still in force**.
 | [ADR-30](#adr-30--one-privileged-function-for-invitations) | Invitations | security |
 | [ADR-31](#adr-31--fixed-driverbus-pairing-is-a-switch-not-a-bigger-bias) | Fixed pairing | optimisation |
 | [ADR-32](#adr-32--the-depot-goes-with-the-driver-and-can-depend-on-the-day-and-the-time) | Driver depot, time-dependent | optimisation |
+| [ADR-33](#adr-33--a-match-is-a-one-off-training-with-its-own-buses-and-its-date-gets-its-own-plan) | Matches, dated plans | data model |
 
 ---
 
@@ -781,3 +782,88 @@ from?" is about when the bus leaves.
 form of `MasterScreen` (`WindowList`, shared with availability). Tests:
 `base-rules.test.js`, `base-rules-ui.test.jsx`, `depot-migration.test.js`,
 `depot-migration-ui.test.jsx`, `driver-base-warning.test.jsx`.
+
+
+## ADR-33 — A match is a one-off training with its own buses, and its date gets its own plan
+
+**Context.** The dispatcher asked for two linked things. Coaches take a bus to matches,
+sometimes with a parent driving, who should not need a user account. And on such a day
+the driver whose bus that is should get another bus for their usual work — "only for
+that day", which the app could not express: the schedule was a weekly template that
+every week reuses, so any change made for one Saturday became every Saturday's plan.
+
+**Decision.**
+- **The match.** A one-off training gains
+  `match: null | { buses: [{ vehicleId, driverName }] }`. Only a one-off training with
+  at least one bus is a match (`isMatch`, `matchBuses`). Its legs are generated from the
+  team's stops like any training's; a team bigger than one bus is split by stops
+  (`splitStationsByCapacity`), to the seats of the **match's** buses — the smallest of
+  them, so every group fits every bus — not the fleet's largest. Bigger teams go to
+  matches on several buses (the dispatcher's answer).
+- **The match chains** are derived from the training every time (`resolveDay`), never
+  stored: one per bus, group *k* out and back on bus *k*, `driverId: null`, that bus's
+  free-text `driverName`, locked. Too few buses: the group without one still gets a
+  chain, with no bus and a red flag saying how many are needed. Too many: the spare bus
+  gets no chain, so it is not booked, and the first chain says it is not needed. A
+  match chain cannot be locked, unlocked or moved on the Schedule screen.
+  No driver record means no wage, no turn-out fee, no fairness share: `dayStats`
+  skips it and `optimizeWeek` leaves it out of the shares.
+- **The buses** are booked for the match window, depot runs included: `optimizeDay`
+  hands the match chains to `assignResources` as fixed occupancy, so the ordinary
+  clash check keeps every other chain off them. Before and after, they are free.
+- **The bus's own driver.** On a match date, a driver whose fixed bus (ADR-31) is at a
+  match may be given any bus (`matchDayState` sets `matchRelaxed`, which
+  `fixedVehicleOf` reads). The soft preference still applies, so they get their own
+  bus back whenever it is free. Their depot goes with them (ADR-32).
+- **Reasons (ADR-24).** A task left uncovered while a match has the bus says so:
+  "Mérkőzés: a(z) … között mérkőzésre visz …".
+- **A plan per match date.** `dateAssignments: { "YYYY-MM-DD": { chains } }`, same shape
+  as a weekday's. `storedChains` / `withStoredChains` are the only way to read and
+  write a day's plan: a match date reads its own plan once it has one and the template
+  until then (so a freshly entered match first shows the usual plan, with the clash
+  flagged), and every write on a match date goes to its own plan. A weekly training's
+  rides written for that date carry `date` instead of `day` (`ridesFromChains`), and
+  on that date the template's rides step aside (`rideOnDate`), so the Week, Driver and
+  print views show the date's plan. A dated plan whose date no longer has a match is
+  ignored, and the day is ordinary again.
+
+**Consequence.** Every reader of the plan goes through the two helpers: `resolveDay`,
+`taskLock`, `saveLockedRide`, `unlockRideTask`, the Schedule screen's lock and move
+actions, and the ride editor. Applying a week moved out of the Schedule screen into
+`applyWeek` (tested directly), which writes each day through `withStoredChains` and
+rebuilds its rides against the state that already holds that plan. Ride lookups take
+the date where they have one (`findRides`, `driverDayRides`, `findConflicts` via
+`ridesShareADay`); a template ride and a dated one never clash, since they are never
+shown on the same date. `chainRefs` counts dated plans, and a bus used by a match
+cannot be deleted.
+
+**Old data (E8).** `ensureShape` fills `match: null` on every training and
+`dateAssignments: {}`. With no matches no date is a match date, so every read and
+write goes to `assignments` exactly as before, and no ride carries a date on a weekly
+training. An older client ignores both fields: it shows a match as an ordinary
+one-off training and plans every date from the template.
+
+**Rejected.** Dated plans for every date. It would turn the template into a calendar,
+which the club did not ask for, and every week would have to be planned separately.
+Matches are the exception that needs a date; the template stays the rule.
+
+**Rejected.** Storing the match chain. It would duplicate the training, and the two
+could drift apart (a changed bus, a moved date) with nothing to say which is right.
+
+**Rejected.** A registered match driver (`driverId`). The dispatcher said coaches and
+parents are free text; a real driver on a match can be handled as an ordinary
+training. It can be added later as an optional field.
+
+**Rejected.** One bus per match, with an oversized team flagged. The first draft did
+this; the dispatcher then said bigger teams go on several buses. The single-bus shape
+`{ vehicleId, driverName }` it saved is read by `ensureShape` as a one-bus list.
+
+**Rejected.** Letting the optimizer pick the match buses. The dispatcher picks them,
+because the coach or parent who drives is tied to a particular bus.
+
+**Where.** `isMatch`, `matchBuses`, `matchesOn`, `datedPlan`, `storedChains`, `withStoredChains`,
+`rideOnDate`, `ridesShareADay` in `logic.js`; `matchChainsOf`, `matchDayState`,
+`applyWeek` and the match handling in `genDayTasks`, `resolveDay`, `optimizeDay`,
+`dayStats`, `ridesFromChains` in `optimizer.js`; the match fields in `TrainingForm`,
+the marker in `OccCard`, the match card in `ScheduleScreen`. Tests: `matches.test.js`,
+`matches-ui.test.jsx`.

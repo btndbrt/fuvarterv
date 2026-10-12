@@ -407,6 +407,7 @@ The whole app state is one plain object. Its top-level keys:
   trainings:   [ ... ],   // when/where each team trains
   rides:       [ ... ],   // concrete bus runs bound to a training occurrence
   assignments: { ... },   // the saved schedule (per weekday: chains of tasks)
+  dateAssignments: { ... }, // a match date's own plan (per date: chains of tasks)
   matrix:      { ... }|null, // cached road travel-time matrix
   settings:    { ... },   // tunable numbers
 }
@@ -522,6 +523,11 @@ vehicle and weekday; `baseOf` (legacy vehicle depot, then club) is only the last
   date: "YYYY-MM-DD" | null,             // for "once"
   start: "HH:MM", end: "HH:MM",
 
+  // A match (ADR-33), only on a "once" training: the buses that take the team, each
+  // with a free-text driver (coach or parent, no user record). A team bigger than one
+  // bus is split by stops across them. null = an ordinary training.
+  match: null | { buses: [ { vehicleId, driverName: string } ] },
+
   // null = use the team's stop list (the pre-feature behaviour).
   // An object = this training has a complete list of its own.
   stops: null | {
@@ -552,8 +558,11 @@ can belong to one occurrence (several buses carrying one team).
 {
   id, trainingId,
   day: weekdayIdx | null,                // which weekday (for weekly trainings)
-  date: "YYYY-MM-DD" | null,             // for one-off trainings
+  date: "YYYY-MM-DD" | null,             // for one-off trainings — and for a weekly
+                                         // training's ride written for one match date
+                                         // (then day is null; ADR-33)
   vehicleId, driverId,
+  driverName: string | undefined,        // a match ride's free-text driver (driverId "")
   dir: "oda" | "vissza",                 // outbound or return
   source: "schedule" | undefined,        // "schedule" = generated from the optimizer
   stops: [ { id, stationId, time: "HH:MM", count: number|"" } ],
@@ -576,6 +585,18 @@ can belong to one occurrence (several buses carrying one team).
 A **chain** is one driver+bus doing a sequence of tasks back-to-back. `taskIds`
 references derived tasks (see [§10](#10-the-optimizer-step-by-step)). `locked: true`
 means "don't let the optimizer move this task."
+
+**Date assignments** (`dateAssignments`) — a match date's own plan, keyed by
+`"YYYY-MM-DD"`, each value shaped like one weekday of `assignments` (ADR-33). The
+weekly template stays the rule; a match date is the one exception that needs a date,
+because the plan around a match (another bus for that bus's driver) must not change
+every other week. **Never read or write `assignments[weekday]` directly**: use
+`storedChains(state, weekday, weekMon)` and `withStoredChains(state, weekday, weekMon,
+chains)` from `logic.js`. A match date reads its dated plan once it has one, the
+template until then, and always writes the dated plan. The match chain itself is
+derived from the training (`resolveDay`) and is never stored. Rides follow the same
+rule through `rideOnDate`: on a match date with its own plan, a weekly training's rides
+are the dated ones, and the template's step aside.
 
 **Matrix** (`matrix`) — cached point-to-point travel times.
 ```js
@@ -971,7 +992,8 @@ There are two related but different things:
 
 They are linked by **materialization**:
 
-- `resolveDay(state, weekday, weekMon)` reads the saved `assignments`, regenerates
+- `resolveDay(state, weekday, weekMon)` reads the saved plan (`storedChains`: the
+  template, or a match date's own plan), adds the day's derived match chains, regenerates
   that day's tasks, and rebuilds the chains as a view model (with live conflict/issue
   detection). Used to display the schedule.
 - `ridesFromChains(state, weekday, chains)` turns chains into `rides` — one ride per
@@ -984,8 +1006,9 @@ They are linked by **materialization**:
   direction) a chain covers. A hand-made ride for an uncovered leg is kept.
 
 Two UI actions trigger this (both in the Schedule screen):
-- **Apply the week proposal** (`applyWeekProposal`) — saves the new `assignments` of
-  all seven days *and* rebuilds their rides. The proposal shows how many hand-made
+- **Apply the week proposal** (`applyWeek` in the optimizer, called by
+  `applyWeekProposal`) — saves the plan of all seven days through `withStoredChains`
+  (a match date to its own plan) *and* rebuilds their rides. The proposal shows how many hand-made
   rides this replaces (`handRidesReplaced`).
 - **A manual move** (`moveToChain`, `moveToNew`, `moveToUnassigned`) — rebuilds the
   current day's rides from the edited schedule.

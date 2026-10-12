@@ -10,9 +10,10 @@
    schedule on every click. */
 
 import { DAYS, byId, uid } from "./constants.js";
-import { timeToMin, minToTime, weekdayIdx } from "./datetime.js";
+import { timeToMin, minToTime, weekdayIdx, toISO, addDays } from "./datetime.js";
 import { legMin, locName } from "./geo.js";
-import { weekOccurrences, legFor, legSource, taskNeedsVignette, chainNeedsVignette, vignetteVenues, startBaseOf, endBaseOf, driverHasBase, rideWindow, fixedVehicleOf, vehicleAllowedFor } from "./logic.js";
+import { weekOccurrences, legFor, legSource, taskNeedsVignette, chainNeedsVignette, vignetteVenues, startBaseOf, endBaseOf, driverHasBase, rideWindow, fixedVehicleOf, vehicleAllowedFor,
+  isMatch, matchBuses, matchesOn, datedPlan, storedChains, withStoredChains, rideOnDate } from "./logic.js";
 
 /* Held-Karp: the shortest order that visits every station.
    pre/post pin a point before/after the chain (typically the venue);
@@ -164,6 +165,12 @@ export function genDayTasks(state, weekday, weekMon) {
     const t = o.training, team = byId(state.teams, t.teamId);
     if (!team) continue;
     const suffix = t.type === "weekly" ? weekday : "x";
+    /* A match (ADR-33) is split across ITS buses, so the split follows their seats —
+       the smallest of them, so every group fits every bus — and not the fleet's. */
+    const match = isMatch(t);
+    const matchSeats = match ? matchBuses(t).map((b) => Number(byId(state.vehicles, b.vehicleId)?.seats) || 0).filter((n) => n > 0) : [];
+    const seatCap = matchSeats.length ? Math.min(...matchSeats) : maxSeats;
+    const capWhat = matchSeats.length ? `a mérkőzés buszainak férőhelyét (${seatCap} fő)` : `a legnagyobb jármű férőhelyét (${seatCap} fő)`;
     const teamLabel = perTeam[t.teamId] > 1 ? `${team.name} · ${locName(state, t.venueId)}` : team.name;
 
     /* One pass per direction. The return leg may have its own stops and its own
@@ -230,6 +237,7 @@ export function genDayTasks(state, weekday, weekMon) {
           /* The day rides along so a chain built from tasks can resolve its driver's
              time-dependent depot (baseRules) without being told the day separately. */
           weekday,
+          ...(match ? { match: true } : {}),
           pax: split ? bus.pax : pax, label: name,
           breakdown: order.map((sid) => ({ stationId: sid, count: n(sid) })).filter((x) => x.count > 0),
         };
@@ -248,16 +256,16 @@ export function genDayTasks(state, weekday, weekMon) {
       const counted = st.reduce((a, sid) => a + cnt(sid), 0);
       const missing = Math.max(0, pax - counted);
       const uncounted = st.filter((sid) => !(cnt(sid) > 0));
-      const bins = maxSeats > 0 && pax > maxSeats ? splitStationsByCapacity(st, cnt, maxSeats, missing) : null;
+      const bins = seatCap > 0 && pax > seatCap ? splitStationsByCapacity(st, cnt, seatCap, missing) : null;
       const orphans = `${who}: a megállónkénti létszámok összege (${counted} fő) kevesebb, mint a teljes létszám (${pax} fő), és nincs üresen hagyott megálló, ahová a maradék ${missing} fő tartozhatna`;
       if (bins && bins.length > 1) {
-        const splitStops = st.filter((sid) => cnt(sid) > maxSeats);
-        skipped.push(`${who}: a ${pax} fős létszám meghaladja a legnagyobb jármű férőhelyét (${maxSeats} fő), ezért ${bins.length} buszra bontva, megállónként.`
+        const splitStops = st.filter((sid) => cnt(sid) > seatCap);
+        skipped.push(`${who}: a ${pax} fős létszám meghaladja ${capWhat}, ezért ${bins.length} buszra bontva, megállónként.`
           + (splitStops.length ? ` Több buszra osztott megálló: ${splitStops.map((sid) =>
             `${locName(state, sid)} (${bins.map((b) => b.stops.find((s) => s.id === sid)?.count).filter(Boolean).join(" + ")} fő)`).join(", ")}.` : ""));
         const names = `${uncounted.map((sid) => locName(state, sid)).join(", ")} ${uncounted.length > 1 ? "megállóknál" : "megállónál"}`;
-        if (uncounted.length && missing > maxSeats)
-          skipped.push(`${who}: ${names} nincs megadva létszám, és a rájuk eső ${missing} fő több, mint a legnagyobb jármű (${maxSeats} fő), ezért nem osztható buszokra — add meg a megállónkénti létszámokat.`);
+        if (uncounted.length && missing > seatCap)
+          skipped.push(`${who}: ${names} nincs megadva létszám, és a rájuk eső ${missing} fő több, mint ${matchSeats.length ? "egy mérkőzésbusz" : "a legnagyobb jármű"} (${seatCap} fő), ezért nem osztható buszokra — add meg a megállónkénti létszámokat.`);
         else if (uncounted.length)
           skipped.push(`${who}: ${names} nincs megadva létszám, ezért ${uncounted.length > 1 ? "ezek egy buszra kerültek" : "egy buszra került"}${missing ? ` a hiányzó ${missing} fővel` : ""} — add meg a megállónkénti létszámokat a pontos felosztáshoz.`);
         else if (missing)
@@ -269,8 +277,8 @@ export function genDayTasks(state, weekday, weekMon) {
            total and stays uncovered rather than sending a bus too small for them. */
         if (bins)
           skipped.push(`${orphans}, ezért a ${pax} fős feladatra nincs elég nagy jármű — javítsd a létszámokat.`);
-        else if (maxSeats > 0 && pax > maxSeats)
-          skipped.push(`${who}: a ${pax} fő meghaladja a legnagyobb jármű férőhelyét (${maxSeats} fő), de nincs megállónkénti létszámbontás, ezért nem osztható buszokra — add meg a megállónkénti létszámokat a felosztáshoz.`);
+        else if (seatCap > 0 && pax > seatCap)
+          skipped.push(`${who}: a ${pax} fő meghaladja ${capWhat}, de nincs megállónkénti létszámbontás, ezért nem osztható buszokra — add meg a megállónkénti létszámokat a felosztáshoz.`);
         tasks.push(mkTask(null));
       }
     }
@@ -898,6 +906,60 @@ export function contentionReasons(state, weekday, t) {
   return out;
 }
 
+/* The day's match chains (ADR-33), derived from the trainings and never stored: one
+   per match bus, each taking one group of the team out and back, with that bus's
+   free-text driver, locked. Group k of the outbound split and group k of the return
+   split go on bus k — the same pairing a single bus makes with the whole team. No
+   driver record, so no wage and no fairness share.
+
+   A group with no bus left (too few picked) still gets a chain, with no bus and a
+   red flag, so it cannot quietly drop out of the plan. A bus with no group (more
+   picked than needed) gets no chain, so it is not booked, and the first chain says
+   so. */
+const groupIdx = (t) => Number((/#(\d+)$/.exec(t.id) || [0, 1])[1]);
+function matchChainsOf(state, tasks) {
+  const out = [];
+  for (const tr of state.trainings.filter(isMatch)) {
+    const ts = tasks.filter((t) => t.trainingId === tr.id);
+    if (!ts.length) continue;
+    const buses = matchBuses(tr);
+    const groups = Math.max(...ts.map(groupIdx));
+    const mine = [];
+    for (let k = 1; k <= groups; k++) {
+      const bus = buses[k - 1] || null;
+      const gt = ts.filter((t) => groupIdx(t) === k);
+      if (!gt.length) continue;
+      const c = mkChain(state, gt.map((t) => ({ ...t, locked: true })), {
+        id: `match:${tr.id}:${k}`, match: true, locked: true,
+        driverId: null, driverName: bus?.driverName || "", vehicleId: bus?.vehicleId || null,
+      });
+      c.vehicle = bus ? byId(state.vehicles, bus.vehicleId) : undefined;
+      c.issues = [];
+      if (!bus)
+        c.issues.push(`Mérkőzés: a csapathoz ${groups} busz kell, de csak ${buses.length} van megadva — ennek a csoportnak (${c.maxPax} fő) nincs busza. Adj hozzá buszt az edzésnél.`);
+      else if (!c.vehicle) c.issues.push("A mérkőzés egyik busza már nem létezik — válassz másikat az edzésnél.");
+      else if (c.maxPax > c.vehicle.seats)
+        c.issues.push(`Mérkőzés: a létszám (${c.maxPax} fő) meghaladja a(z) ${c.vehicle.plate} férőhelyét (${c.vehicle.seats}). Adj hozzá buszt az edzésnél, vagy javítsd a létszámot.`);
+      mine.push(c);
+    }
+    const spare = buses.slice(groups).map((b) => byId(state.vehicles, b.vehicleId)?.plate).filter(Boolean);
+    if (spare.length && mine.length)
+      mine[0].issues.push(`Mérkőzés: a csapat ${groups} buszon elfér, ezért ${spare.join(", ")} nem kell — nincs lefoglalva, más fuvarra beosztható.`);
+    out.push(...mine);
+  }
+  return out;
+}
+
+/* On a match date, a driver whose fixed bus is at a match may be given another bus
+   that day (fixedVehicleOf reads matchRelaxed). The soft preference still applies, so
+   they get their own bus back whenever it is free. */
+export function matchDayState(state, weekday, weekMon) {
+  if (!weekMon || !state.settings?.fixedVehicle) return state;
+  const buses = new Set(matchesOn(state, toISO(addDays(weekMon, weekday))).flatMap((t) => matchBuses(t).map((b) => b.vehicleId)));
+  if (!buses.size) return state;
+  return { ...state, drivers: state.drivers.map((d) => (buses.has(d.preferredVehicleId) ? { ...d, matchRelaxed: true } : d)) };
+}
+
 /* Resolve the saved schedule into a view model, with live clash detection. */
 export function resolveDay(state, weekday, weekMon) {
   const { tasks, skipped } = genDayTasks(state, weekday, weekMon);
@@ -905,8 +967,9 @@ export function resolveDay(state, weekday, weekMon) {
   const assigned = new Set();
   const chains = [];
   let droppedChains = 0;
-  for (const ch of (state.assignments?.[weekday]?.chains || [])) {
-    const ts = ch.taskIds.filter((x) => tmap[x.id]).map((x) => ({ ...tmap[x.id], locked: !!x.locked }));
+  for (const ch of storedChains(state, weekday, weekMon)) {
+    /* A match's tasks belong to its derived chain only, whatever a stored chain says. */
+    const ts = ch.taskIds.filter((x) => tmap[x.id] && !tmap[x.id].match).map((x) => ({ ...tmap[x.id], locked: !!x.locked }));
     /* A chain's task ids can go stale. The id contains the split index, so after
        a change to the stops or the headcounts a `...:vissza` id can become
        `...:vissza#1` and `...:vissza#2`. The chain would then disappear, taking its
@@ -930,6 +993,10 @@ export function resolveDay(state, weekday, weekMon) {
     if (c.vehicle && !c.vehicle.hasVignette && chainNeedsVignette(state, c))
       c.issues.push(`A(z) ${c.vehicle.plate} nincs országos matricával, de a lánc ide megy: ${vignetteVenues(state, c).join(", ")}.`);
     chains.push(c);
+  }
+  for (const m of matchChainsOf(state, tasks)) {
+    m.tasks.forEach((t) => assigned.add(t.id));
+    chains.push(m);
   }
   for (let i = 0; i < chains.length; i++)
     for (let j = i + 1; j < chains.length; j++) {
@@ -976,6 +1043,7 @@ export function dayStats(state, chains) {
      in between and counted the call-out fee twice. */
   const byDriver = new Map();
   for (const c of chains) {
+    if (c.match) continue;   // a free-text driver: no wage, and the club pays no turn-out
     for (const l of c.links) idle += l.idle;
     // A call-out fee is only due when somebody actually turns out. A chain with no
     // driver used to carry one anyway, inflating the "before" column of the proposal.
@@ -1004,8 +1072,12 @@ export function dayStats(state, chains) {
 /* Turn the schedule's chains into actual rides: one ride per task, with the stop
    times taken from the task's own timetable. This is how the schedule shows up on
    the week and driver screens too. */
-export function ridesFromChains(state, weekday, chains) {
+export function ridesFromChains(state, weekday, chains, weekMon = null) {
   const out = [];
+  /* On a match date with a plan of its own, a weekly training's rides are written for
+     that date only, so the template's rides keep serving every other week. */
+  const date = weekMon ? toISO(addDays(weekMon, weekday)) : null;
+  const dated = !!(date && datedPlan(state, date));
   for (const ch of chains || []) {
     /* Every ride of one chain carries the same runId. A chain IS one continuous
        occupancy — the optimizer priced it as a single turn-out with the bus staying
@@ -1023,10 +1095,11 @@ export function ridesFromChains(state, weekday, chains) {
            protects it even when the leg is split across several buses. */
         taskId: t.id,
         trainingId: t.trainingId,
-        day: tr.type === "weekly" ? weekday : null,
-        date: tr.type === "once" ? tr.date : null,
+        day: tr.type === "weekly" && !dated ? weekday : null,
+        date: tr.type === "once" ? tr.date : (dated ? date : null),
         vehicleId: ch.vehicleId || "",
         driverId: ch.driverId || "",
+        ...(ch.match ? { driverName: ch.driverName || "" } : {}),
         dir: t.dir,
         source: "schedule",
         /* Outbound, a stop's time is the DEPARTURE (after boarding); on the return
@@ -1047,11 +1120,12 @@ export function ridesFromChains(state, weekday, chains) {
 
 /* True when this ride belongs to the tasks affected on this weekday. These are the
    rides that generating from the schedule may replace. */
-export function rideBelongsToDay(state, ride, weekday, affectedTrainingIds) {
+export function rideBelongsToDay(state, ride, weekday, affectedTrainingIds, weekMon = null) {
   if (!affectedTrainingIds.has(ride.trainingId)) return false;
   const tr = byId(state.trainings, ride.trainingId);
   if (!tr) return false;
-  return tr.type === "weekly" ? ride.day === weekday : true;
+  if (weekMon) return rideOnDate(state, ride, tr, toISO(addDays(weekMon, weekday)));
+  return tr.type === "weekly" ? ride.day === weekday && !ride.date : true;
 }
 
 /* The day's chains, indexed for rebuilding rides: the legs — training plus
@@ -1075,9 +1149,9 @@ function chainIndex(chains) {
    for the crew but not for the ride would still overwrite what the user locked.
    Generated rides are never pinned: they are rebuilt from their chain, which is what
    keeps them current after a change to the stops or the settings. */
-function pinnedChain(state, ride, weekday, affected, idx) {
+function pinnedChain(state, ride, weekday, affected, idx, weekMon = null) {
   if (ride.source === "schedule" || !ride.taskId) return null;
-  if (!rideBelongsToDay(state, ride, weekday, affected)) return null;
+  if (!rideBelongsToDay(state, ride, weekday, affected, weekMon)) return null;
   return idx.lockedIn.get(ride.taskId) || null;
 }
 
@@ -1090,9 +1164,9 @@ function pinnedChain(state, ride, weekday, affected, idx) {
    kept. The optimizer had nothing to put in its place, and deleting it would leave
    the team with no ride at all. A GENERATED ride for such a leg still goes, because
    it names a run that no longer holds it. */
-export function rideReplacedBy(state, ride, weekday, affected, idx) {
-  if (!rideBelongsToDay(state, ride, weekday, affected)) return false;
-  if (pinnedChain(state, ride, weekday, affected, idx)) return false;
+export function rideReplacedBy(state, ride, weekday, affected, idx, weekMon = null) {
+  if (!rideBelongsToDay(state, ride, weekday, affected, weekMon)) return false;
+  if (pinnedChain(state, ride, weekday, affected, idx, weekMon)) return false;
   return ride.source === "schedule" || idx.covered.has(`${ride.trainingId}|${ride.dir || "oda"}`);
 }
 
@@ -1105,7 +1179,7 @@ export function withGeneratedRides(state, weekday, weekMon, chains) {
   const idx = chainIndex(chains);
   const kept = [], pinnedTasks = new Set();
   for (const r of state.rides) {
-    const ch = pinnedChain(state, r, weekday, affected, idx);
+    const ch = pinnedChain(state, r, weekday, affected, idx, weekMon);
     if (ch) {
       /* One ride per locked task. A second one pinned to the same task goes, or the
          bus would be booked twice. */
@@ -1114,9 +1188,9 @@ export function withGeneratedRides(state, weekday, weekMon, chains) {
       /* Crew and run follow the chain, so a locked task moved on the Schedule tab
          takes its ride along instead of leaving it with the old driver. */
       kept.push({ ...r, driverId: ch.driverId || r.driverId, vehicleId: ch.vehicleId || r.vehicleId, runId: ch.id || r.runId });
-    } else if (!rideReplacedBy(state, r, weekday, affected, idx)) kept.push(r);
+    } else if (!rideReplacedBy(state, r, weekday, affected, idx, weekMon)) kept.push(r);
   }
-  const fresh = ridesFromChains(state, weekday, chains).filter((r) => !pinnedTasks.has(r.taskId));
+  const fresh = ridesFromChains(state, weekday, chains, weekMon).filter((r) => !pinnedTasks.has(r.taskId));
   return [...kept, ...fresh];
 }
 
@@ -1128,9 +1202,34 @@ export function handRidesReplaced(state, weekMon, days) {
     if (r.empty) return;
     const affected = new Set(genDayTasks(state, d, weekMon).tasks.map((t) => t.trainingId));
     const idx = chainIndex(r.chains);
-    n += state.rides.filter((x) => x.source !== "schedule" && rideReplacedBy(state, x, d, affected, idx)).length;
+    n += state.rides.filter((x) => x.source !== "schedule" && rideReplacedBy(state, x, d, affected, idx, weekMon)).length;
   });
   return n;
+}
+
+/* Apply a week proposal: each day's plan, and the rides rebuilt from it, so the week
+   and driver screens show the plan at once. A match date's plan goes under its date
+   (withStoredChains), and its rides are rebuilt against the state that already holds
+   that plan, so they come out dated. `days` is optimizeWeek's per-day result. */
+export function applyWeek(state, weekMon, days) {
+  /* Identified ONCE, before the chains are used twice. A chain straight out of the
+     optimizer has no id, and stamping one separately for the schedule and for the
+     rides gave them two different ids — so a ride could no longer name the run it
+     belongs to. */
+  const perDay = days.map((r) => (r.chains || []).map((c) => ({ ...c, id: c.id || uid() })));
+  let next = state;
+  perDay.forEach((chains, d) => {
+    next = withStoredChains(next, d, weekMon, chains.map((c) => ({
+      id: c.id, driverId: c.driverId, vehicleId: c.vehicleId,
+      ...(c.match ? { match: true } : {}),
+      /* The chain-level lock has to survive the round trip, or optimising once
+         would quietly unlock every chain the user had settled. */
+      locked: !!c.locked,
+      taskIds: c.tasks.map((t) => ({ id: t.id, locked: !!t.locked })),
+    })));
+    next = { ...next, rides: withGeneratedRides(next, d, weekMon, chains) };
+  });
+  return next;
 }
 
 /* ---------- Locking a ride from the ride editor ----------
@@ -1149,8 +1248,8 @@ export function taskForRide(state, ride, weekday, weekMon) {
 }
 
 /* Where a task sits in the day's saved schedule, and whether it is locked there. */
-export function taskLock(state, weekday, taskId) {
-  for (const ch of state.assignments?.[weekday]?.chains || []) {
+export function taskLock(state, weekday, taskId, weekMon = null) {
+  for (const ch of storedChains(state, weekday, weekMon)) {
     const x = ch.taskIds.find((y) => y.id === taskId);
     if (x) return { chain: ch, locked: !!(x.locked || ch.locked), byChain: !!ch.locked, alone: ch.taskIds.length === 1 };
   }
@@ -1159,8 +1258,8 @@ export function taskLock(state, weekday, taskId) {
 
 /* Whether the optimizer leaves this ride alone. A generated ride carries its task
    from birth; a hand-made one only once it has been saved with the lock. */
-export function rideLocked(state, ride, weekday) {
-  return !!(ride.taskId && taskLock(state, weekday, ride.taskId)?.locked);
+export function rideLocked(state, ride, weekday, weekMon = null) {
+  return !!(ride.taskId && taskLock(state, weekday, ride.taskId, weekMon)?.locked);
 }
 
 /* Save a ride with the lock on. The ride's task goes into a locked chain with the
@@ -1169,8 +1268,8 @@ export function rideLocked(state, ride, weekday) {
    are then rebuilt, so a generated ride the pinned one supersedes goes at once
    instead of showing the driver view the same trip twice. */
 export function saveLockedRide(state, ride, weekday, weekMon, task) {
-  const cur = taskLock(state, weekday, task.id);
-  let chains = state.assignments?.[weekday]?.chains || [];
+  const cur = taskLock(state, weekday, task.id, weekMon);
+  let chains = storedChains(state, weekday, weekMon);
   let chainId;
   if (cur && cur.chain.id && cur.chain.driverId === ride.driverId && cur.chain.vehicleId === ride.vehicleId) {
     chainId = cur.chain.id;
@@ -1185,8 +1284,7 @@ export function saveLockedRide(state, ride, weekday, weekMon, task) {
   }
   const saved = { ...ride, taskId: task.id, source: "manual", runId: chainId };
   const next = {
-    ...state,
-    assignments: { ...state.assignments, [weekday]: { chains } },
+    ...withStoredChains(state, weekday, weekMon, chains),
     rides: [...state.rides.filter((r) => r.id !== ride.id), saved],
   };
   return { ...next, rides: withGeneratedRides(next, weekday, weekMon, resolveDay(next, weekday, weekMon).chains) };
@@ -1196,8 +1294,8 @@ export function saveLockedRide(state, ride, weekday, weekMon, task) {
    the task is alone in it. A chain locked with other work in it stays locked — the
    ride editor does not offer this there. The ride itself is left as it is until the
    next rebuild replaces it. */
-export function unlockRideTask(state, weekday, taskId) {
-  const chains = (state.assignments?.[weekday]?.chains || []).map((ch) => {
+export function unlockRideTask(state, weekday, taskId, weekMon = null) {
+  const chains = storedChains(state, weekday, weekMon).map((ch) => {
     if (!ch.taskIds.some((x) => x.id === taskId)) return ch;
     return {
       ...ch,
@@ -1205,7 +1303,7 @@ export function unlockRideTask(state, weekday, taskId) {
       taskIds: ch.taskIds.map((x) => (x.id === taskId ? { ...x, locked: false } : x)),
     };
   });
-  return { ...state, assignments: { ...state.assignments, [weekday]: { chains } } };
+  return withStoredChains(state, weekday, weekMon, chains);
 }
 
 /* The entry point for optimising one day.
@@ -1217,6 +1315,14 @@ export function optimizeDay(state, weekday, weekMon, fairness = null) {
   const cur = resolveDay(state, weekday, weekMon);
   const notes = [...cur.skipped];
   if (!cur.tasks.length) return { empty: true, notes };
+  /* The day's matches (ADR-33): their chains are fixed, their buses are booked for
+     the match window, and a driver whose fixed bus is at a match may take another. */
+  const matchCh = cur.chains.filter((c) => c.match);
+  state = matchDayState(state, weekday, weekMon);
+  const matchUses = matchCh.map((c) => chainUse(c, null, c.vehicleId));
+  const matchReason = (t) => matchCh
+    .filter((m) => m.start < t.end && t.start < m.end)
+    .map((m) => `Mérkőzés: a(z) ${m.vehicle?.plate || "?"} ${minToTime(m.start)}–${minToTime(m.end)} között mérkőzésre visz (${m.tasks[0].label.split(" · ")[0]}${m.driverName ? `, sofőr: ${m.driverName}` : ""}), ezért ekkor nem osztható be.`);
   const maxSeats = Math.max(0, ...state.vehicles.map((v) => Number(v.seats) || 0));
 
   /* Locked work becomes skeleton chains carrying their driver and vehicle.
@@ -1231,6 +1337,7 @@ export function optimizeDay(state, weekday, weekMon, fairness = null) {
      to place it somewhere better. A lock holds what was locked, and no more. */
   const lockedGroups = new Map();
   for (const ch of cur.chains) {
+    if (ch.match) continue;
     const lt = ch.locked ? ch.tasks : ch.tasks.filter((t) => t.locked);
     if (!lt.length) continue;
     /* Grouped by chain id, NOT by driver|vehicle. The latter fused two deliberately
@@ -1246,7 +1353,7 @@ export function optimizeDay(state, weekday, weekMon, fairness = null) {
   // Hard feasibility of the free tasks, so an impossible one gets a precise reason.
   const uncovered = [], free = [];
   for (const t of cur.tasks) {
-    if (lockedIds.has(t.id)) continue;
+    if (lockedIds.has(t.id) || t.match) continue;
     const reasons = [];
     if (t.pax > maxSeats)
       reasons.push(`Nincs jármű elegendő férőhellyel: ${t.pax} fő kellene, a legnagyobb jármű ${maxSeats} férőhelyes.`);
@@ -1306,7 +1413,7 @@ export function optimizeDay(state, weekday, weekMon, fairness = null) {
     return driverPay(state, d, [chainUse(c, c.driverId, c.vehicleId)]).cost
       + (offPreferred ? (state.settings.preferredBias || 0) : 0);
   };
-  const fixedUseOf = (sk) => sk.map((c) => chainUse(c, c.driverId, c.vehicleId));
+  const fixedUseOf = (sk) => [...sk.map((c) => chainUse(c, c.driverId, c.vehicleId)), ...matchUses];
   let anyCapped = false;
   /* With no week-level view, the day balances against itself: shares are worked out
      from this day's own chains, and nothing is carried in from elsewhere. */
@@ -1377,9 +1484,10 @@ export function optimizeDay(state, weekday, weekMon, fairness = null) {
   if (anyCapped) notes.push("A keresési tér nagy volt, a hozzárendelés a legjobb megtalált megoldás (heurisztikus).");
   const result = [...skl];
   for (const p of plan.asg.picks) {
-    if (p.uncovered) p.chain.tasks.forEach((t) => uncovered.push({ task: t, reasons: contentionReasons(state, weekday, t) }));
+    if (p.uncovered) p.chain.tasks.forEach((t) => uncovered.push({ task: t, reasons: [...contentionReasons(state, weekday, t), ...matchReason(t)] }));
     else result.push({ ...p.chain, driverId: p.driverId, vehicleId: p.vehicleId });
   }
+  result.push(...matchCh);
   result.sort((a, b) => a.start - b.start);
   return { empty: false, chains: result, uncovered, notes, stats: dayStats(state, result),
     improve: { before: objectiveBefore, after: plan.cost } };
@@ -1437,7 +1545,8 @@ export function optimizeWeek(state, weekMon) {
       chains: a.chains + st.chains, uncovered: a.uncovered + r.unassigned.length };
   }, { cost: 0, paidMin: 0, chains: 0, uncovered: 0 });
 
-  const entries = days.flatMap((r, d) => (r.chains || []).map((c) => ({ weekday: d, start: c.start, end: c.end })));
+  /* A match is nobody's work to share: its driver is not on the roster. */
+  const entries = days.flatMap((r, d) => (r.chains || []).filter((c) => !c.match).map((c) => ({ weekday: d, start: c.start, end: c.end })));
   const totalPaid = days.reduce((a, r) => a + (r.stats?.paidMin || 0), 0);
   const shares = fairShares(state, entries, totalPaid);
 

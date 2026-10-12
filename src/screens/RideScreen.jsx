@@ -4,7 +4,7 @@ import { useState, useMemo, useRef } from "react";
 import { ChevronLeft, ChevronRight, GripVertical, ArrowUp, ArrowDown, AlertTriangle, MapPin, Clock, X, Flag, Zap, Lock } from "lucide-react";
 import { DAYS, uid, byId } from "../domain/constants.js";
 import { mondayOf, addDays, timeToMin, minToTime, fmtDate, fmtDateFull, fmtWeekRange } from "../domain/datetime.js";
-import { weekOccurrences, findRides, findConflicts, rideWindow, seatSum, venueDepartMin, legFor, venueNeedsVignette } from "../domain/logic.js";
+import { weekOccurrences, findRides, findConflicts, rideWindow, seatSum, venueDepartMin, legFor, venueNeedsVignette, storedChains, datedPlan } from "../domain/logic.js";
 import { planOda, planVissza, bestStationOrder, taskForRide, taskLock, rideLocked, saveLockedRide, unlockRideTask } from "../domain/optimizer.js";
 import { Field, Check, DangerBtn, EmptyState } from "../ui/base.jsx";
 import { OccCard } from "../ui/OccCard.jsx";
@@ -45,7 +45,7 @@ export function RidePicker({ state, onPick }) {
 export const o2t = (o) => ({ trainingId: o.training.id, dayIdx: o.dayIdx, dateISO: o.dateISO });
 
 export function RideEditor({ state, update, training, dayIdx, dateISO, onBack }) {
-  const rides = findRides(state, training, dayIdx);
+  const rides = findRides(state, training, dayIdx, dateISO);
   const [selIdx, setSelIdx] = useState(0);
   const idx = Math.min(selIdx, rides.length); // rides.length = új fuvar
   const existing = idx < rides.length ? rides[idx] : null;
@@ -57,8 +57,8 @@ export function RideEditor({ state, update, training, dayIdx, dateISO, onBack })
             const d = byId(state.drivers, r.driverId);
             return (
               <button key={r.id} className={`chip ${i === idx ? "on" : ""}`} onClick={() => setSelIdx(i)}>
-                {i + 1}. fuvar · {(r.dir || "oda") === "vissza" ? "VISSZA" : "ODA"}{d ? ` · ${d.name}` : ""}
-                {rideLocked(state, r, dayIdx) && <Lock size={12} aria-label="zárolva" />}
+                {i + 1}. fuvar · {(r.dir || "oda") === "vissza" ? "VISSZA" : "ODA"}{d ? ` · ${d.name}` : r.driverName ? ` · ${r.driverName}` : ""}
+                {rideLocked(state, r, dayIdx, mondayOf(dateISO)) && <Lock size={12} aria-label="zárolva" />}
               </button>
             );
           })}
@@ -78,7 +78,13 @@ export function RideForm({ state, update, training, dayIdx, dateISO, existing, o
 
   const [draft, setDraft] = useState(() => existing
     ? { ...existing, stops: existing.stops.map((s) => ({ ...s })) }
-    : { id: "__uj", trainingId: training.id, day: training.type === "weekly" ? dayIdx : null, date: training.type === "once" ? training.date : null, vehicleId: "", driverId: "", dir: "oda", stops: [] });
+    /* A new ride on a match date with a plan of its own is written for that date only,
+       like the generated ones (ADR-33); anywhere else it joins the weekly template. */
+    : { id: "__uj", trainingId: training.id,
+        ...(training.type === "weekly" && datedPlan(state, dateISO)
+          ? { day: null, date: dateISO }
+          : { day: training.type === "weekly" ? dayIdx : null, date: training.type === "once" ? training.date : null }),
+        vehicleId: "", driverId: "", dir: "oda", stops: [] });
 
   /* Direction. Older rides saved without one behave as outbound, and rideWindow
      reads them the same way (`ride.dir || "oda"`), so the two cannot drift apart. */
@@ -93,7 +99,7 @@ export function RideForm({ state, update, training, dayIdx, dateISO, existing, o
 
   const vehicle = byId(state.vehicles, draft.vehicleId);
   const needsVignette = venueNeedsVignette(state, training.venueId);
-  const hasSchedule = ((state.assignments?.[dayIdx]?.chains) || []).length > 0;
+  const hasSchedule = storedChains(state, dayIdx, mondayOf(dateISO)).length > 0;
 
   /* Locking. The lock goes on the schedule task this ride stands for, where the
      optimizer honours it (see saveLockedRide). Worked out per direction, because a
@@ -101,7 +107,7 @@ export function RideForm({ state, update, training, dayIdx, dateISO, existing, o
   const task = useMemo(
     () => taskForRide(state, { trainingId: draft.trainingId, dir: draft.dir, taskId: draft.taskId }, dayIdx, mondayOf(dateISO)),
     [state, draft.trainingId, draft.dir, draft.taskId, dayIdx, dateISO]);
-  const lock = task ? taskLock(state, dayIdx, task.id) : null;
+  const lock = task ? taskLock(state, dayIdx, task.id, mondayOf(dateISO)) : null;
   /* Locked on arrival: a generated ride whose task is locked, or a hand-made one
      saved with the lock. A hand-made ride whose task is locked for SOMEONE ELSE is
      not — the next rebuild replaces it, and the box must not claim otherwise. */
@@ -184,7 +190,7 @@ export function RideForm({ state, update, training, dayIdx, dateISO, existing, o
     update((s) => {
       if (lockOn && task) return saveLockedRide(s, ride, dayIdx, mondayOf(dateISO), task);
       const next = { ...s, rides: existing ? s.rides.map((r) => (r.id === existing.id ? ride : r)) : [...s.rides, ride] };
-      return wasLocked ? unlockRideTask(next, dayIdx, task.id) : next;
+      return wasLocked ? unlockRideTask(next, dayIdx, task.id, mondayOf(dateISO)) : next;
     });
     onBack();
   };

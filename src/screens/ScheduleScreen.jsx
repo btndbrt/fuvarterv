@@ -8,8 +8,8 @@ import { Plus, AlertTriangle, X, ChevronsRight, ChevronDown, Lock, Unlock, Zap, 
 import { DAYS, uid, byId } from "../domain/constants.js";
 import { mondayOf, weekdayIdx, minToTime, fmtDateFull, toISO } from "../domain/datetime.js";
 import { locName, matrixKey, computeMatrix } from "../domain/geo.js";
-import { resolveDay, dayStats, optimizeWeek, pairingIssue, withGeneratedRides, handRidesReplaced, driverAvailableFor, driverPay, chainUse, depotLegs, chainShifts } from "../domain/optimizer.js";
-import { driversWithoutBase, depotMigrationPlan } from "../domain/logic.js";
+import { resolveDay, dayStats, optimizeWeek, pairingIssue, withGeneratedRides, handRidesReplaced, driverAvailableFor, driverPay, chainUse, depotLegs, chainShifts, applyWeek, matchDayState } from "../domain/optimizer.js";
+import { driversWithoutBase, depotMigrationPlan, storedChains, withStoredChains } from "../domain/logic.js";
 import { fmtFt, fmtH } from "../ui/format.js";
 import { Field, NumField, Check, Modal, PlateChip, TeamDot, EmptyState, InfoDot, BusyOverlay } from "../ui/base.jsx";
 import { VignettePill } from "../ui/VignettePill.jsx";
@@ -29,7 +29,7 @@ export function taskHardIssues(state, weekday, t) {
   return out;
 }
 
-export function TaskRow({ state, task: t, locked, chainLocked, inChain, onLock, onMove, reasons }) {
+export function TaskRow({ state, task: t, locked, chainLocked, inChain, onLock, onMove, reasons, fixed = false }) {
   const team = byId(state.teams, t.teamId);
   const body = (
     <div className="flex items-center gap-2 flex-wrap">
@@ -40,7 +40,8 @@ export function TaskRow({ state, task: t, locked, chainLocked, inChain, onLock, 
       <span className="text-xs" style={{ color: "var(--ink2)" }}>
         {locName(state, t.from)} → {locName(state, t.to)} · {t.pax} fő
       </span>
-      <span className="flex gap-1 ml-auto">
+      {/* A match's tasks (fixed) are set by the training itself: nothing to lock or move. */}
+      {!fixed && <span className="flex gap-1 ml-auto">
         {inChain && (
           /* Inside a locked chain the task is already held by the chain, so its own
              switch would promise something it cannot deliver. It is shown locked and
@@ -55,7 +56,7 @@ export function TaskRow({ state, task: t, locked, chainLocked, inChain, onLock, 
           </button>
         )}
         <button className="iconbtn" style={{ width: 32, height: 32 }} onClick={onMove} aria-label="Áthelyezés"><ArrowLeftRight size={14} /></button>
-      </span>
+      </span>}
       {t.plan && t.plan.length > 0 ? (
         <div className="text-xs tnum" style={{ color: "var(--ink2)", width: "100%", fontWeight: 500 }}>
           {t.dir === "oda"
@@ -120,12 +121,14 @@ export function ChainCard({ state, chain: c, place, onLock, onMove, onToggleChai
   return (
     <div className="card mb-3 overflow-hidden">
       <div className="p-3 flex items-center gap-2 flex-wrap" style={{ background: "var(--surface-inv)", color: "var(--on-inv)" }}>
-        <span className="disp text-base">{c.driver?.name || "— nincs sofőr —"}</span>
+        {c.match
+          ? <span className="disp text-base">Mérkőzés · {c.driverName || "nincs sofőr megadva"}</span>
+          : <span className="disp text-base">{c.driver?.name || "— nincs sofőr —"}</span>}
         {c.vehicle && <PlateChip plate={c.vehicle.plate} />}
         {c.vehicle?.hasVignette && <VignettePill />}
         {c.vehicle && <span className="text-xs" style={{ color: "var(--on-inv)", opacity: .7 }}>{c.vehicle.seats} fh</span>}
         <span className="tnum ml-auto text-base">{minToTime(c.start)}–{minToTime(c.end)}</span>
-        {onToggleChainLock && (
+        {onToggleChainLock && !c.match && (
           <button className="header-ic" onClick={onToggleChainLock}
             aria-pressed={!!c.locked}
             aria-label={c.locked ? "Lánc feloldása" : "Lánc zárolása"}
@@ -139,7 +142,9 @@ export function ChainCard({ state, chain: c, place, onLock, onMove, onToggleChai
       <div className="px-3 py-1 text-xs flex gap-3 flex-wrap" style={{ color: "var(--ink2)", borderBottom: "1px solid var(--line)" }}>
         {/* The money belongs to the shift, so it is stated once, on the chain that
             opens it. Repeating it on the next card would read as a second turn-out. */}
-        {first ? (
+        {c.match ? (
+          <span>A mérkőzésre szóló fuvar: a busz erre az időre foglalt, a sofőr nem a klub sofőrje, ezért bér és kiszállási díj nem jár.</span>
+        ) : first ? (
           <>
             <span>fizetett: <b>{fmtH(paid)}</b>{paid > (span ? span.end - span.start : c.end - c.start) ? " (min. műszak)" : ""}</span>
             {fromBase && <span>műszak: <b className="tnum">{minToTime(span.start)}–{minToTime(span.end)}</b> (telephelytől)</span>}
@@ -176,7 +181,7 @@ export function ChainCard({ state, chain: c, place, onLock, onMove, onToggleChai
         )}
         {c.tasks.map((t, i) => (
           <div key={t.id}>
-            <TaskRow state={state} task={t} locked={t.locked || c.locked} chainLocked={c.locked} inChain
+            <TaskRow state={state} task={t} locked={t.locked || c.locked} chainLocked={c.locked} inChain fixed={!!c.match}
               onLock={() => onLock(t.id)} onMove={() => onMove(t)} />
             {i < c.links.length && (
               <div className="linkline">
@@ -197,7 +202,7 @@ export function ChainCard({ state, chain: c, place, onLock, onMove, onToggleChai
 export function MoveModal({ state, task, chains, currentChainId, onClose, onToChain, onToNew, onToUnassigned }) {
   const [nd, setNd] = useState(state.drivers[0]?.id || "");
   const [nv, setNv] = useState(state.vehicles[0]?.id || "");
-  const targets = chains.filter((c) => c.id !== currentChainId);
+  const targets = chains.filter((c) => c.id !== currentChainId && !c.match);
   return (
     <Modal title={`Áthelyezés — ${task.label}`} onClose={onClose}>
       {targets.length > 0 && <h4 className="disp text-sm mb-2">Meglévő láncba</h4>}
@@ -396,28 +401,8 @@ export function ScheduleScreen({ state, update }) {
      view shows the plan at once. Locks are what protect manual work — see
      rideReplacedBy. */
   const applyWeekProposal = () => {
-    /* Identified ONCE, before the chains are used twice. A chain straight out of the
-       optimizer has no id, and stamping one separately for the schedule and for the
-       rides gave them two different ids — so a ride could no longer name the run it
-       belongs to. */
-    const perDay = weekProposal.days.map((r) => (r.chains || []).map((c) => ({ ...c, id: c.id || uid() })));
-    update((s) => {
-      const assignments = { ...s.assignments };
-      let rides = s.rides;
-      perDay.forEach((chains, d) => {
-        assignments[d] = {
-          chains: chains.map((c) => ({
-            id: c.id, driverId: c.driverId, vehicleId: c.vehicleId,
-            /* The chain-level lock has to survive the round trip, or optimising once
-               would quietly unlock every chain the user had settled. */
-            locked: !!c.locked,
-            taskIds: c.tasks.map((t) => ({ id: t.id, locked: !!t.locked })),
-          })),
-        };
-        rides = withGeneratedRides({ ...s, rides }, d, weekMon, chains);
-      });
-      return { ...s, assignments, rides };
-    });
+    const days = weekProposal.days;
+    update((s) => applyWeek(s, weekMon, days));
     setWeekProposal(null);
     setMsg("A heti beosztás alkalmazva és a fuvarok rögzítve — a Hét és a Sofőr nézetben is megjelennek.");
   };
@@ -427,30 +412,30 @@ export function ScheduleScreen({ state, update }) {
      print, and printing then would hand out blank paper. */
   const weekMonISO = toISO(weekMon);
   const printCount = useMemo(() => driversWithWeekWork(state, mondayOf(weekMonISO)).length, [state, weekMonISO]);
+  /* The day as the optimizer sees it: on a match date, the match bus's own driver
+     may take another bus, and the reasons under an uncovered task have to agree.
+     Keyed on the ISO string, not weekMon: handing the Date to a function during
+     render makes the React compiler assume it may be mutated. */
+  const dayState = useMemo(() => matchDayState(state, weekday, mondayOf(weekMonISO)), [state, weekday, weekMonISO]);
 
   /* Lock or release a whole chain. Locking does NOT seal it: the optimizer may still
      append compatible work, and whatever it appends comes back unlocked. */
-  const toggleChainLock = (chainId) => update((s) => ({
-    ...s,
-    assignments: {
-      ...s.assignments,
-      [weekday]: {
-        chains: (s.assignments[weekday]?.chains || []).map((ch) => (ch.id === chainId ? { ...ch, locked: !ch.locked } : ch)),
-      },
-    },
-  }));
+  /* Every edit of the day's plan reads and writes it through storedChains /
+     withStoredChains: on a match date that is the date's own plan, so an exception
+     made for the match does not change every other week (ADR-33). */
+  /* They capture the week as its ISO string, not the weekMon Date: these handlers go
+     straight into JSX props, and a captured Date is something the React compiler has
+     to assume a child might mutate. */
+  const dayChains = (s) => storedChains(s, weekday, mondayOf(weekMonISO));
+  const setDayChains = (s, chains) => withStoredChains(s, weekday, mondayOf(weekMonISO), chains);
 
-  const toggleLock = (taskId) => update((s) => ({
-    ...s,
-    assignments: {
-      ...s.assignments,
-      [weekday]: {
-        chains: (s.assignments[weekday]?.chains || []).map((ch) => ({
-          ...ch, taskIds: ch.taskIds.map((x) => (x.id === taskId ? { ...x, locked: !x.locked } : x)),
-        })),
-      },
-    },
-  }));
+  const toggleChainLock = (chainId) => update((s) => setDayChains(s,
+    dayChains(s).map((ch) => (ch.id === chainId ? { ...ch, locked: !ch.locked } : ch))));
+
+  const toggleLock = (taskId) => update((s) => setDayChains(s,
+    dayChains(s).map((ch) => ({
+      ...ch, taskIds: ch.taskIds.map((x) => (x.id === taskId ? { ...x, locked: !x.locked } : x)),
+    }))));
 
   /* A manual move reaches the Sofőr view straight away: the day's rides are rebuilt
      from the edited schedule. The moved task is locked, so no later optimisation
@@ -459,18 +444,16 @@ export function ScheduleScreen({ state, update }) {
   const stripTask = (chains, taskId) =>
     chains.map((ch) => ({ ...ch, taskIds: ch.taskIds.filter((x) => x.id !== taskId) })).filter((ch) => ch.taskIds.length);
   const moveToChain = (taskId, chainId) => update((s) => {
-    let chains = stripTask(s.assignments[weekday]?.chains || [], taskId);
+    let chains = stripTask(dayChains(s), taskId);
     chains = chains.map((ch) => (ch.id === chainId ? { ...ch, taskIds: [...ch.taskIds, { id: taskId, locked: true }] } : ch));
-    return withDayRides({ ...s, assignments: { ...s.assignments, [weekday]: { chains } } });
+    return withDayRides(setDayChains(s, chains));
   });
   const moveToNew = (taskId, driverId, vehicleId) => update((s) => {
-    const chains = stripTask(s.assignments[weekday]?.chains || [], taskId);
+    const chains = stripTask(dayChains(s), taskId);
     chains.push({ id: uid(), driverId, vehicleId, taskIds: [{ id: taskId, locked: true }] });
-    return withDayRides({ ...s, assignments: { ...s.assignments, [weekday]: { chains } } });
+    return withDayRides(setDayChains(s, chains));
   });
-  const moveToUnassigned = (taskId) => update((s) => withDayRides({
-    ...s, assignments: { ...s.assignments, [weekday]: { chains: stripTask(s.assignments[weekday]?.chains || [], taskId) } },
-  }));
+  const moveToUnassigned = (taskId) => update((s) => withDayRides(setDayChains(s, stripTask(dayChains(s), taskId))));
   const setSetting = (k, v) => update((s) => ({ ...s, settings: { ...s.settings, [k]: v } }));
 
   const moveChainId = moveTask ? (res.chains.find((c) => c.tasks.some((t) => t.id === moveTask.id))?.id || null) : null;
@@ -625,7 +608,7 @@ export function ScheduleScreen({ state, update }) {
           <h3 className="disp text-base mb-2">Fedetlen feladatok</h3>
           <div className="card p-3 flex flex-col gap-3" style={{ borderColor: "var(--acc)", borderWidth: 2 }}>
             {res.unassigned.map((t) => (
-              <TaskRow key={t.id} state={state} task={t} onMove={() => setMoveTask(t)} reasons={taskHardIssues(state, weekday, t)} />
+              <TaskRow key={t.id} state={state} task={t} onMove={() => setMoveTask(t)} reasons={taskHardIssues(dayState, weekday, t)} />
             ))}
           </div>
         </section>
