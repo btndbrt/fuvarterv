@@ -9,7 +9,7 @@ import { DAYS, uid, byId } from "../domain/constants.js";
 import { mondayOf, weekdayIdx, minToTime, fmtDateFull, toISO } from "../domain/datetime.js";
 import { locName, matrixKey, computeMatrix } from "../domain/geo.js";
 import { resolveDay, dayStats, optimizeWeek, pairingIssue, withGeneratedRides, handRidesReplaced, driverAvailableFor, driverPay, chainUse, depotLegs, chainShifts } from "../domain/optimizer.js";
-import { hasAnyBase } from "../domain/logic.js";
+import { baseOf, driverHasBase } from "../domain/logic.js";
 import { fmtFt, fmtH } from "../ui/format.js";
 import { Field, NumField, Check, Modal, PlateChip, TeamDot, EmptyState, InfoDot, BusyOverlay } from "../ui/base.jsx";
 import { VignettePill } from "../ui/VignettePill.jsx";
@@ -111,8 +111,9 @@ export function ChainCard({ state, chain: c, place, onLock, onMove, onToggleChai
   const { pay, chains: inShift, first, last, gap } = place || solo;
   const { paid, cost, shifts } = pay;
   const span = shifts[0];
-  /* Derived here, not stored on the chain: the depot comes from the vehicle (or
-     the club default), so it follows a change of either with nothing to migrate. */
+  /* Derived here, not stored on the chain: the depot comes from the driver, the
+     vehicle or the club default, so it follows a change of any with nothing to
+     migrate. */
   const legs = depotLegs(state, use);
   const fromBase = span && (span.start !== c.start || span.end !== c.end);
   return (
@@ -472,10 +473,11 @@ export function ScheduleScreen({ state, update }) {
   const setSetting = (k, v) => update((s) => ({ ...s, settings: { ...s.settings, [k]: v } }));
 
   const moveChainId = moveTask ? (res.chains.find((c) => c.tasks.some((t) => t.id === moveTask.id))?.id || null) : null;
-  /* Vehicles with no depot at any time: neither their own, nor the club's, nor one in
-     a time window. A vehicle with windows but no all-day depot has none outside its
-     windows; that is a choice the editor makes visible, not a missing setting. */
-  const baseless = state.vehicles.filter((v) => !hasAnyBase(state, v));
+  /* Vehicles with no resolvable depot: neither their own nor the club's. Only a
+     problem for a driver without a depot of their own, since a driver's depot goes
+     with them to any bus; when every driver has one, no run ever asks the bus. */
+  const everyDriverHasBase = state.drivers.length > 0 && state.drivers.every(driverHasBase);
+  const baseless = everyDriverHasBase ? [] : state.vehicles.filter((v) => !baseOf(state, v.id));
 
   /* Every STANDING warning about the day, gathered into one collapsible list so the
      chains start at the top of the screen instead of below a stack of banners.
@@ -505,7 +507,7 @@ export function ScheduleScreen({ state, update }) {
           „{state.bases[0].name}” beállítása klubtelephelynek
         </button>
       ) : (
-        <div className="mt-1">Válaszd ki a klub telephelyét a ⚙ panelben, vagy add meg a járműveknél.</div>
+        <div className="mt-1">Válaszd ki a klub telephelyét a ⚙ panelben, vagy add meg a járműveknél vagy a sofőröknél.</div>
       )}
     </div>
   );
@@ -545,7 +547,7 @@ export function ScheduleScreen({ state, update }) {
           <Check label="Fix sofőr–jármű párosítás"
             hint="Bekapcsolva a sofőr csak a saját (preferált) buszát kaphatja meg, a többi járművet az optimalizálás fel sem ajánlja neki. Akinek nincs saját busza, azt nem érinti; két sofőrnek lehet ugyanaz a busza. Kivételt kézi áthelyezéssel és zárolással tehetsz."
             checked={state.settings.fixedVehicle} onChange={(v) => setSetting("fixedVehicle", v)} />
-          <Field label="Klub telephelye" hint="Innen indulnak a buszok, ha a járműnél nincs saját telephely megadva. A fizetett idő a telephelytől a visszaérkezésig tart.">
+          <Field label="Klub telephelye" hint="Innen indulnak a buszok, ha sem a sofőrnél, sem a járműnél nincs saját telephely megadva. A fizetett idő a telephelytől a visszaérkezésig tart.">
             <select className="inp" value={state.settings.defaultBaseId || ""} onChange={(e) => setSetting("defaultBaseId", e.target.value || null)}>
               <option value="">— nincs megadva —</option>
               {state.bases.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}

@@ -7,17 +7,22 @@ import { baseAt, startBaseOf, endBaseOf, deleteGuard } from "../src/domain/logic
 import { depotLegs, spanOf, driverPay, emptyRunMin, homeTripMin, genDayTasks, chainUse, mkChain, rideUse, driverDayShifts } from "../src/domain/optimizer.js";
 
 /*
- * Time-dependent depots (vehicle.baseRules).
+ * Time-dependent depots (driver.baseId, driver.baseRules).
  *
  * A bus is not always kept in one place. A driver who works at an office until 16:00
- * has the bus there during the day; after work it is at home. The rule lives on the
- * VEHICLE as a list of windows shaped like a driver's availability:
+ * has the bus there during the day; after work it is at home. The depot goes with the
+ * DRIVER (the dispatcher's call): a single all-day depot plus a list of windows shaped
+ * like the driver's availability:
  *
  *   baseRules: [{ days: [weekdayIdx], start: "HH:MM", end: "HH:MM", baseId }]
  *
+ * Lookup order: the driver's window, the driver's baseId, the vehicle's baseId, the
+ * club depot. A run with no (registered) driver uses the vehicle's.
+ *
  * The depot a shift STARTS from is the one valid when the bus leaves; the depot it
- * RETURNS to is the one valid when it gets back. The two may differ. With no rules
- * everything is exactly as before — the existing depot tests stay unchanged to prove it.
+ * RETURNS to is the one valid when it gets back. The two may differ. With no driver
+ * depots everything is exactly as before — the existing depot tests stay unchanged to
+ * prove it.
  */
 
 const WEEK_MON = mondayOf("2026-08-03");          // a Monday
@@ -31,11 +36,13 @@ const HOME = { id: "hHOME", name: "Otthon", address: "", note: "", lat: 46.10, l
 
 const ALL_DAYS = [0, 1, 2, 3, 4, 5, 6];
 
-function makeState({ baseRules = [], baseId = "hHOME", defaultBaseId = null, trainings = [] } = {}) {
+/* The rules sit on driver d1; `baseId` is the vehicle's own depot, the fallback the
+   existing cases are written against. */
+function makeState({ baseRules = [], baseId = "hHOME", driverBase = null, defaultBaseId = null, trainings = [] } = {}) {
   return {
     stations: [STOP], venues: [VENUE], bases: [WORK, HOME],
-    vehicles: [{ id: "b1", name: "Busz", plate: "AB-1", seats: 20, hasVignette: false, baseId, baseRules }],
-    drivers: [{ id: "d1", name: "Anna", wage: 3000, minShiftMin: 0, availability: [], preferredVehicleId: null }],
+    vehicles: [{ id: "b1", name: "Busz", plate: "AB-1", seats: 20, hasVignette: false, baseId }],
+    drivers: [{ id: "d1", name: "Anna", wage: 3000, minShiftMin: 0, availability: [], preferredVehicleId: null, baseId: driverBase, baseRules }],
     teams: [{ id: "tm", name: "TM", color: "#000", stationIds: ["sA"], venueIds: ["v0"], passengerCount: null,
       stationCounts: { sA: 5 }, routeMode: "auto", routeAnchorId: null, returnStationIds: null,
       returnStationCounts: {}, returnRouteAnchorId: null }],
@@ -50,40 +57,50 @@ const untilFour = [{ days: ALL_DAYS, start: "00:00", end: "16:00", baseId: "hWOR
 /* An occupancy (not named use*, which the linter reads as a React hook) that must be at the stop at `start` and ends at the venue at `end`. */
 const occ = (weekday, start, end) => ({ driverId: "d1", vehicleId: "b1", weekday, start, end, from: "sA", to: "v0" });
 
+/* Who and when, for baseAt. */
+const who = (weekday, driverId = "d1", vehicleId = "b1") => ({ driverId, vehicleId, weekday });
+
 describe("data model", () => {
-  test("ensureShape gives every vehicle an empty rule list, and keeps a saved one", () => {
-    const s = ensureShape({ vehicles: [{ id: "a" }, { id: "b", baseRules: untilFour }] });
-    expect(s.vehicles[0].baseRules).toEqual([]);
-    expect(s.vehicles[1].baseRules).toEqual(untilFour);
+  test("ensureShape gives every driver no depot and an empty rule list, and keeps saved ones", () => {
+    const s = ensureShape({ drivers: [{ id: "a" }, { id: "b", baseId: "hWORK", baseRules: untilFour }] });
+    expect(s.drivers[0].baseId).toBe(null);
+    expect(s.drivers[0].baseRules).toEqual([]);
+    expect(s.drivers[1].baseId).toBe("hWORK");
+    expect(s.drivers[1].baseRules).toEqual(untilFour);
   });
 
-  test("the fixture's vehicles carry an empty rule list", () => {
-    for (const v of seedState().vehicles) expect(v.baseRules).toEqual([]);
+  test("the fixture's drivers carry no depot of their own", () => {
+    for (const d of seedState().drivers) {
+      expect(d.baseId).toBe(null);
+      expect(d.baseRules).toEqual([]);
+    }
   });
 });
 
-describe("baseAt: which depot a rule says the bus is at", () => {
+describe("baseAt: which depot the driver's rules put the run at", () => {
   const s = makeState({ baseRules: [{ days: [MON, THU], start: "08:00", end: "16:10", baseId: "hWORK" }] });
 
   test("inside a window on a listed day, the rule's depot", () => {
-    expect(baseAt(s, "b1", MON, timeToMin("12:00"))).toBe("hWORK");
-    expect(baseAt(s, "b1", THU, timeToMin("08:00"))).toBe("hWORK");     // start is inclusive
+    expect(baseAt(s, who(MON), timeToMin("12:00"))).toBe("hWORK");
+    expect(baseAt(s, who(THU), timeToMin("08:00"))).toBe("hWORK");     // start is inclusive
   });
 
-  test("outside the window, or on another day, the vehicle's own depot", () => {
-    expect(baseAt(s, "b1", MON, timeToMin("16:10"))).toBe("hHOME");    // end is exclusive
-    expect(baseAt(s, "b1", MON, timeToMin("07:59"))).toBe("hHOME");
-    expect(baseAt(s, "b1", FRI, timeToMin("12:00"))).toBe("hHOME");
+  test("outside the window, or on another day, the fallback depot", () => {
+    expect(baseAt(s, who(MON), timeToMin("16:10"))).toBe("hHOME");    // end is exclusive
+    expect(baseAt(s, who(MON), timeToMin("07:59"))).toBe("hHOME");
+    expect(baseAt(s, who(FRI), timeToMin("12:00"))).toBe("hHOME");
   });
 
-  test("then the club depot, then none", () => {
+  test("fallback order: the driver's depot, the vehicle's, the club's, then none", () => {
+    expect(baseAt(makeState({ driverBase: "hWORK" }), who(MON), 600)).toBe("hWORK");
+    expect(baseAt(makeState(), who(MON), 600)).toBe("hHOME");
     const club = makeState({ baseId: null, defaultBaseId: "hWORK" });
-    expect(baseAt(club, "b1", MON, 600)).toBe("hWORK");
-    expect(baseAt(makeState({ baseId: null }), "b1", MON, 600)).toBe(null);
+    expect(baseAt(club, who(MON), 600)).toBe("hWORK");
+    expect(baseAt(makeState({ baseId: null }), who(MON), 600)).toBe(null);
   });
 
   test("no weekday known (an older caller) means the fallback depot", () => {
-    expect(baseAt(s, "b1", undefined, timeToMin("12:00"))).toBe("hHOME");
+    expect(baseAt(s, who(undefined), timeToMin("12:00"))).toBe("hHOME");
   });
 
   test("an incomplete or back-to-front window is ignored", () => {
@@ -92,7 +109,7 @@ describe("baseAt: which depot a rule says the bus is at", () => {
       { days: [MON], start: "17:00", end: "09:00", baseId: "hWORK" },
       { days: [MON], start: "08:00", end: "16:00", baseId: null },
     ] });
-    expect(baseAt(bad, "b1", MON, 600)).toBe("hHOME");
+    expect(baseAt(bad, who(MON), 600)).toBe("hHOME");
   });
 });
 
@@ -203,6 +220,39 @@ describe("rules reach the uses built from tasks and rides", () => {
   });
 });
 
+describe("the depot goes with the driver, not the bus", () => {
+  /* Two buses, two drivers. Anna (d1) has the office-until-16:00 rule and lives at
+     HOME; b2 is kept at WORK; b1 has no depot of its own. */
+  const s = makeState({ baseRules: untilFour, driverBase: "hHOME", baseId: null });
+  s.vehicles.push({ id: "b2", name: "Busz 2", plate: "AB-2", seats: 20, hasVignette: false, baseId: "hWORK" });
+  s.drivers.push({ id: "d2", name: "Béla", wage: 3000, minShiftMin: 0, availability: [], preferredVehicleId: null, baseId: null, baseRules: [] });
+  const evening = (driverId, vehicleId) => ({ ...occ(MON, timeToMin("19:00"), timeToMin("20:00")), driverId, vehicleId });
+
+  test("a driver given another bus takes their own depot to it", () => {
+    expect(depotLegs(s, evening("d1", "b2")).out.baseId).toBe("hHOME");
+    expect(depotLegs(s, evening("d1", "b1")).out.baseId).toBe("hHOME");
+  });
+
+  test("a driver with no depot of their own falls back to the bus's", () => {
+    expect(depotLegs(s, evening("d2", "b2")).out.baseId).toBe("hWORK");
+  });
+
+  test("two drivers sharing one bus each start from their own depot", () => {
+    expect(depotLegs(s, evening("d1", "b2")).out.baseId).toBe("hHOME");
+    expect(depotLegs(s, evening("d2", "b2")).out.baseId).toBe("hWORK");
+  });
+
+  test("a run without a registered driver uses the bus's depot", () => {
+    expect(depotLegs(s, evening(null, "b2")).out.baseId).toBe("hWORK");
+    expect(depotLegs(s, evening(null, "b1"))).toBe(null);
+  });
+
+  test("the driver's all-day depot applies even with no weekday known", () => {
+    const u = { ...evening("d1", "b2"), weekday: undefined };
+    expect(startBaseOf(s, u).baseId).toBe("hHOME");
+  });
+});
+
 describe("homeTripMin uses the depot valid at each end of the gap", () => {
   /* A morning run ends at 12:00 while the bus belongs at the office; the evening
      run leaves after 16:00 when it belongs at home. Going "home" in between means
@@ -216,6 +266,33 @@ describe("homeTripMin uses the depot valid at each end of the gap", () => {
     const B = tasks.find((t) => t.trainingId === "pm" && t.dir === "oda");
     expect(homeTripMin(s, A, B)).toBe(legMin(s, A.to, "hWORK") + legMin(s, "hHOME", B.from));
   });
+
+  /* The driver is not chosen yet at chaining time either, so the question is asked of
+     every driver: could ANY of them get home? A driver with a depot of their own takes
+     it to whichever bus they get; one without takes the bus's. */
+  test("a driver's own depot is what decides whether they can go home", () => {
+    const am = { id: "am", teamId: "tm", venueId: "v0", type: "weekly", days: [MON], date: null, start: "10:30", end: "11:50", stops: null };
+    const pm = { ...am, id: "pm", start: "19:00", end: "20:00" };
+    const s = makeState({ driverBase: "hWORK", trainings: [am, pm] });
+    const { tasks } = genDayTasks(s, MON, WEEK_MON);
+    const A = tasks.find((t) => t.trainingId === "am" && t.dir === "vissza");
+    const B = tasks.find((t) => t.trainingId === "pm" && t.dir === "oda");
+    expect(homeTripMin(s, A, B)).toBe(legMin(s, A.to, "hWORK") + legMin(s, "hWORK", B.from));
+    s.drivers.push({ id: "d2", name: "Béla", wage: 3000, minShiftMin: 0, availability: [], preferredVehicleId: null, baseId: null, baseRules: [] });
+    const viaBus = legMin(s, A.to, "hHOME") + legMin(s, "hHOME", B.from);
+    expect(homeTripMin(s, A, B)).toBe(Math.min(viaBus, legMin(s, A.to, "hWORK") + legMin(s, "hWORK", B.from)));
+  });
+
+  test("with no drivers at all, the buses' depots are asked, as before", () => {
+    const am = { id: "am", teamId: "tm", venueId: "v0", type: "weekly", days: [MON], date: null, start: "10:30", end: "11:50", stops: null };
+    const pm = { ...am, id: "pm", start: "19:00", end: "20:00" };
+    const s = makeState({ trainings: [am, pm] });
+    s.drivers = [];
+    const { tasks } = genDayTasks(s, MON, WEEK_MON);
+    const A = tasks.find((t) => t.trainingId === "am" && t.dir === "vissza");
+    const B = tasks.find((t) => t.trainingId === "pm" && t.dir === "oda");
+    expect(homeTripMin(s, A, B)).toBe(legMin(s, A.to, "hHOME") + legMin(s, "hHOME", B.from));
+  });
 });
 
 describe("empty rules change nothing", () => {
@@ -228,14 +305,19 @@ describe("empty rules change nothing", () => {
   });
 });
 
-describe("deleteGuard counts depots used only by a rule", () => {
-  test("a depot named only in baseRules cannot be deleted", () => {
+describe("deleteGuard counts depots used only by a driver", () => {
+  test("a depot named only in a driver's baseRules cannot be deleted", () => {
     const s = makeState({ baseRules: untilFour });
     expect(deleteGuard(s, "bases", "hWORK")).toContain("Használatban: 1");
   });
 
-  test("a vehicle using one depot both ways is counted once", () => {
-    const s = makeState({ baseRules: [{ days: [MON], start: "08:00", end: "12:00", baseId: "hHOME" }] });
-    expect(deleteGuard(s, "bases", "hHOME")).toContain("Használatban: 1");
+  test("a depot that is only a driver's all-day depot cannot be deleted", () => {
+    const s = makeState({ driverBase: "hWORK" });
+    expect(deleteGuard(s, "bases", "hWORK")).toContain("Használatban: 1");
+  });
+
+  test("a driver using one depot both ways is counted once, and so is the vehicle", () => {
+    const s = makeState({ driverBase: "hHOME", baseRules: [{ days: [MON], start: "08:00", end: "12:00", baseId: "hHOME" }] });
+    expect(deleteGuard(s, "bases", "hHOME")).toContain("Használatban: 2");
   });
 });

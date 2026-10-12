@@ -156,7 +156,8 @@ A new field's default in `ensureShape` must reproduce the **previous** behaviour
 return leg with no `returnStationIds` mirrors the outbound one. A training with no
 `stops` uses the team's list. A vehicle with no `baseId` falls back to the club depot,
 and with no depot at all, paid time is measured exactly as it was before depots existed. A
-vehicle with no `baseRules` keeps that one depot all day.
+driver with no `baseId` and no `baseRules` uses the bus's depot, as every run did before
+driver depots existed.
 
 *Why:* there is no schema version and no server-side migration, so an upgrade must never
 silently reprice a club's schedule.
@@ -287,7 +288,8 @@ erDiagram
     RIDE }o--|| DRIVER : "driver"
     RIDE ||--o{ RIDESTOP : "timed stops"
     VEHICLE }o--o| BASE : "depot (baseId)"
-    VEHICLE ||--o{ BASERULE : "time windows (baseRules)"
+    DRIVER }o--o| BASE : "own depot (baseId)"
+    DRIVER ||--o{ BASERULE : "time windows (baseRules)"
     BASERULE }o--|| BASE : "depot"
     DRIVER }o--o| VEHICLE : "preferred vehicle"
     ASSIGNMENT ||--o{ CHAIN : "per weekday"
@@ -335,7 +337,7 @@ fixing one.
 | I7b | A shift is drawn with one depot run at each end, whatever it is split into | `groupByShift` + `chainShifts` | `depot-return-ui.test.jsx` |
 | I7c | Empty running is charged wherever cost is | `emptyRunMin` inside `driverPay` | `depot-return.test.js` |
 | I7d | Every ride of one chain is one shift | `runId` + `groupByShift` | `depot-return.test.js` |
-| I7e | A shift starts at the depot valid when the bus leaves and ends at the one valid when it gets back; with no `baseRules` both are the single depot | `startBaseOf`, `endBaseOf`, `depotLegs` | `base-rules.test.js` |
+| I7e | A shift starts at the depot valid when the bus leaves and ends at the one valid when it gets back; the driver's depot goes before the bus's; with no `baseRules` both ends are the single depot | `startBaseOf`, `endBaseOf`, `depotLegs` | `base-rules.test.js` |
 | I8 | Only a vignette-carrying vehicle may serve a vignette-only venue (a hard constraint) | `assignResources`, `optimizeDay` | `vignette.test.js` |
 | I8b | With `fixedVehicle` on, an unlocked chain never puts a paired driver on another bus | `vehicleAllowedFor` in `assignResources` and the skeleton merge | `fixed-vehicle.test.js` |
 | I9 | A station, venue or depot cannot be saved without a coordinate | `MasterForm` | `master-coord.test.jsx` |

@@ -12,7 +12,7 @@
 import { DAYS, byId, uid } from "./constants.js";
 import { timeToMin, minToTime, weekdayIdx } from "./datetime.js";
 import { legMin, locName } from "./geo.js";
-import { weekOccurrences, legFor, legSource, taskNeedsVignette, chainNeedsVignette, vignetteVenues, startBaseOf, endBaseOf, rideWindow, fixedVehicleOf, vehicleAllowedFor } from "./logic.js";
+import { weekOccurrences, legFor, legSource, taskNeedsVignette, chainNeedsVignette, vignetteVenues, startBaseOf, endBaseOf, driverHasBase, rideWindow, fixedVehicleOf, vehicleAllowedFor } from "./logic.js";
 
 /* Held-Karp: the shortest order that visits every station.
    pre/post pin a point before/after the chain (typically the venue);
@@ -227,7 +227,7 @@ export function genDayTasks(state, weekday, weekMon) {
         const name = `${teamLabel} · ${dirLabel}${split ? ` (${idx}/${count})` : ""}`;
         const base = {
           id: `${t.id}:${suffix}:${dir}${tag}`, dir, teamId: team.id, trainingId: t.id,
-          /* The day rides along so a chain built from tasks can resolve a vehicle's
+          /* The day rides along so a chain built from tasks can resolve its driver's
              time-dependent depot (baseRules) without being told the day separately. */
           weekday,
           pax: split ? bus.pax : pax, label: name,
@@ -355,15 +355,15 @@ export function mkChain(state, ts, extra = {}) {
    home mid-day.
 
    The depot has to be the one the PAY calculation will use, or the two disagree.
-   spanOf resolves it per vehicle, and the vehicle is not chosen yet at chaining
-   time, so this takes the shortest trip over the depots of the buses that could
-   actually run both tasks. That is the optimistic reading, matching the question
-   being asked: could the driver get home?
+   spanOf resolves it per driver and vehicle (the driver's depot first, then the
+   bus's), and neither is chosen yet at chaining time, so this takes the shortest trip
+   over every driver and every bus that could actually run both tasks. That is the
+   optimistic reading, matching the question being asked: could the driver get home?
 
-   "Home" may be two places. With time-dependent depots (baseRules) the bus goes back
-   to the depot valid when it arrives after A, and sets off for B from the depot valid
-   when it leaves — the same two resolutions spanOf makes for the two separate shifts
-   this trip would split the day into, so the two still answer alike.
+   "Home" may be two places. With a driver's time windows (baseRules) the bus goes
+   back to the depot valid when it arrives after A, and sets off for B from the depot
+   valid when it leaves — the same two resolutions spanOf makes for the two separate
+   shifts this trip would split the day into, so the two still answer alike.
 
    Reading settings.defaultBaseId alone was the bug. A bus with its own baseId made
    the flow decline to chain (the club depot is near, so "they can go home") while
@@ -373,14 +373,26 @@ export function mkChain(state, ts, extra = {}) {
 export function homeTripMin(state, A, B) {
   const needsV = taskNeedsVignette(state, A) || taskNeedsVignette(state, B);
   const pax = Math.max(A.pax, B.pax);
+  const fit = state.vehicles.filter((v) => v.seats >= pax && (!needsV || v.hasVignette));
+  /* With no drivers at all, a driverless run: the buses' depots, as before driver
+     depots existed. Pairs that resolve alike are asked once — a driver with no depot
+     of their own is every such driver, and one with an all-day depot ignores the bus —
+     which keeps this as cheap as it was on data without driver depots. */
+  const drivers = state.drivers.length ? state.drivers : [null];
+  const seen = new Set();
   let best = null;
-  for (const v of state.vehicles) {
-    if (v.seats < pax || (needsV && !v.hasVignette)) continue;
-    const back = endBaseOf(state, { vehicleId: v.id, weekday: A.weekday, end: A.end, to: A.to }).baseId;
-    const out = startBaseOf(state, { vehicleId: v.id, weekday: B.weekday, start: B.start, from: B.from }).baseId;
-    if (!back || !out) continue;
-    const trip = legMin(state, A.to, back) + legMin(state, out, B.from);
-    if (best == null || trip < best) best = trip;
+  for (const d of drivers) {
+    for (const v of fit) {
+      const key = `${driverHasBase(d) ? d.id : "-"}|${d?.baseId ? "-" : v.id}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const who = { driverId: d?.id ?? null, vehicleId: v.id };
+      const back = endBaseOf(state, { ...who, weekday: A.weekday, end: A.end, to: A.to }).baseId;
+      const out = startBaseOf(state, { ...who, weekday: B.weekday, start: B.start, from: B.from }).baseId;
+      if (!back || !out) continue;
+      const trip = legMin(state, A.to, back) + legMin(state, out, B.from);
+      if (best == null || trip < best) best = trip;
+    }
   }
   return best;
 }
@@ -467,16 +479,16 @@ export const chainUse = (c, driverId, vehicleId) => ({
    list, where they could be edited into something the pay calculation never agreed
    to. */
 export function depotLegs(state, u) {
-  /* The two ends are resolved separately, because with time-dependent depots
+  /* The two ends are resolved separately, because with a driver's time windows
      (baseRules) the bus can leave one depot and return to another: out of the office
-     at 16:10, home at night. With no rules both resolve to baseOf, as before. */
+     at 16:10, home at night. With no driver depot both resolve to baseOf, as before. */
   const s = startBaseOf(state, u), e = endBaseOf(state, u);
   if (!s.baseId && !e.baseId) return null;
   /* Each leg repeats its baseId rather than leaving it on the parent alone: callers
      hand a single leg to a renderer, and a leg that cannot name its own depot is
      one that quietly prints a question mark. The parent's baseId is the START depot,
      which is the only one there was before the two could differ. A side with no depot
-     (outside every window of a vehicle with no fallback) has no leg. */
+     (outside every window, with no fallback depot anywhere) has no leg. */
   return {
     baseId: s.baseId || e.baseId,
     out: s.baseId ? { baseId: s.baseId, fromId: s.baseId, toId: u.from, min: u.start - s.depart, depart: s.depart, arrive: u.start } : null,
@@ -505,7 +517,7 @@ export function rideUse(state, ride, training) {
   return {
     driverId: ride.driverId, vehicleId: ride.vehicleId, start, end,
     runId: ride.runId || null,
-    /* Which weekday, for the vehicle's time-dependent depot. A weekly ride names its
+    /* Which weekday, for the driver's time-dependent depot. A weekly ride names its
        day; a one-off one has a date instead. */
     weekday: training.type === "weekly" ? ride.day : (training.date ? weekdayIdx(training.date) : null),
     from: vissza ? training.venueId : (stops[0]?.stationId || null),

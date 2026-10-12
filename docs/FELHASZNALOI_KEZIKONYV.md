@@ -153,10 +153,11 @@ Ez azért fontos, mert **a sofőr fizetett ideje a telephelytől a telephelyig t
 1. **Adatok → Telephelyek → Új telephely**: név, cím, koordináta, **Mentés**.
 2. Ezután állítsd be a **klub telephelyét**: **Beosztás fül → ⚙ (Paraméterek) → Klub telephelye**.
 
-Ha egy busz nem a klub telephelyén áll (például a sofőr otthon tartja), azt a járműnél
-külön megadhatod (lásd [5.4](#54-járművek)). Ha a busz napszaktól vagy naptól függően
-máshol áll (például napközben a sofőr munkahelyén), azt is a járműnél adod meg, az
-**Időszakos telephely** résznél.
+Ha a sofőr a buszt nem a klub telephelyén tartja (például otthon), azt **a sofőrnél**
+adod meg (lásd [5.5](#55-sofőrök)). A sofőr telephelye vele megy: bármelyik buszt kapja,
+onnan indul. Ha ez napszaktól vagy naptól függ (például napközben a munkahelyén van),
+azt is a sofőrnél adod meg, az **Időszakos telephely** résznél. A járműnél is megadhatsz
+telephelyet: ez akkor számít, ha a busz sofőrjének nincs saját telephelye.
 
 > **Figyelem:** telephely nélkül a program úgy számol, mintha a sofőr két fuvar között
 > mindig hazamehetne. Távoli helyszínnél ez nem igaz, ezért a költség és a fizetett idő
@@ -171,42 +172,9 @@ máshol áll (például napközben a sofőr munkahelyén), azt is a járműnél 
 4. **Férőhelyek száma (sofőr nélkül) \*** – hány utas fér el. A sofőrt ne számold bele!
 5. **Van országos autópálya-matricája** – kapcsold be, ha van.
 6. **Telephely** – hagyd a „— a klub telephelye —” értéken, vagy válaszd ki, ahol a busz áll.
-7. **Időszakos telephely** (nem kötelező) – ha a busz bizonyos napokon, bizonyos időben
-   máshol áll (lásd lent).
-8. **Megjegyzés** (nem kötelező), majd **Mentés**.
-
-**Időszakos telephely – ha a busz nem mindig ugyanott áll**
-
-Előfordul, hogy a sofőr a buszt napközben a munkahelyén tartja, és csak munka után viszi
-haza. Ilyenkor a délutáni fuvarra a busz a munkahelyről indul, az estire már otthonról.
-Ezt idősávokkal adod meg, ugyanúgy, mint a sofőrök elérhetőségét:
-
-1. Vedd fel a helyeket telephelyként (pl. „Kovács – munkahely”, „Kovács – otthon”), lásd
-   [5.3](#53-telephelyek).
-2. A járműnél a **Telephely** legyen az, ahol a busz **általában** áll (pl. az otthon).
-3. Kattints az **Időszakos telephely hozzáadása** gombra, jelöld be a **napokat**, add meg az
-   **idősávot**, és válaszd ki, **melyik telephelyen** áll a busz ebben az idősávban.
-4. Több idősávot is felvehetsz. Az **X** gombbal törölhetsz egyet.
-
-Hogyan számol vele a program?
-
-- A **kiállás** annál a telephelynél kezdődik, ahol a busz az **induláskor** áll; a
-  **beállás** annál ér véget, ahol a **visszaérkezéskor**. A kettő lehet különböző: a busz
-  délután a munkahelyről indul, este pedig hazaér.
-- Ha egy idősáv sem érvényes, a fenti **Telephely** számít (ha az sincs, a klub telephelye).
-- Ha az indulás épp az idősáv vége után van, de a busz onnan már nem érhetne haza időben,
-  akkor onnan indul, ahol az idősáv végén állt. Példa: a sofőr **16:00-ig** dolgozik
-  (idősáv: 00:00–16:00, munkahely), a **16:10-es** induláshoz a busz a **munkahelyről**
-  indul, mert otthonról 16:00 előtt kellett volna elindulnia, amikor még a munkahelyen
-  állt. Egy **17:00-s** induláshoz már **otthonról** indul.
-- Az idősáv vége már nem tartozik bele: a 00:00–16:00 sáv 16:00-kor már nem érvényes.
-  Egész napos sávhoz írj 00:00–23:59-et.
-- Hiányosan kitöltött idősávot (nincs nap bejelölve) a program mentéskor elhagy.
-
-> **Példa:** egy sofőr hétfőtől csütörtökig 16:10-ig dolgozik egy irodában, pénteken
-> 13:30-kor végez, és előbb hazamegy. Telephely: **otthon**. Időszakos telephely:
-> **H, K, Sze, Cs, 00:00–16:10, iroda**. Hétfőtől csütörtökig a délutáni fuvar az irodából
-> indul, pénteken otthonról.
+   Ez csak akkor számít, ha a buszt vezető sofőrnek nincs saját telephelye (lásd
+   [5.5](#55-sofőrök)).
+7. **Megjegyzés** (nem kötelező), majd **Mentés**.
 
 ### 5.5 Sofőrök
 
@@ -222,6 +190,8 @@ Hogyan számol vele a program?
 | **Órabér (Ft/óra)** | A sofőr órabére. Alapértelmezés: 3000 Ft. |
 | **Min. műszak (perc)** | A legrövidebb idő, amit a klub egy kiállásért kifizet. Alapértelmezés: 180 perc (3 óra). |
 | **Elérhetőség** | Mikor osztható be a sofőr (lásd lent). |
+| **Telephely** | Ahonnan a sofőr a buszával indul, és ahova visszatér (lásd lent). Ha nincs megadva, a jármű telephelye számít. |
+| **Időszakos telephely** | Ha a sofőr bizonyos napokon, bizonyos időben máshonnan indul (lásd lent). |
 | **Megjegyzés** | Bármi, ami fontos. |
 
 **Elérhetőség megadása:**
@@ -236,6 +206,44 @@ Hogyan számol vele a program?
 > **Mire jó a „Min. műszak”?** Ha egy sofőr két fuvara között sok idő van, a program eldönti,
 > megéri-e hazaküldeni, vagy olcsóbb, ha a helyszínen vár. Minél nagyobb a minimális műszak,
 > annál inkább egyben marad a sofőr napja.
+
+**Telephely és időszakos telephely – ha a sofőr nem mindig ugyanonnan indul**
+
+A **Telephely** az a hely, ahonnan a sofőr a buszával általában indul (pl. az otthona).
+Ha nincs megadva, a jármű telephelye számít, ha annak sincs, a klubé. A sofőr telephelye
+**vele megy**: ha egy napra másik buszt kap (például mert a sajátja mérkőzésre megy),
+akkor is a saját telephelyéről indul.
+
+Előfordul, hogy a sofőr a buszt napközben a munkahelyén tartja, és csak munka után viszi
+haza. Ilyenkor a délutáni fuvarra a munkahelyről indul, az estire már otthonról. Ezt
+idősávokkal adod meg, ugyanúgy, mint az elérhetőséget:
+
+1. Vedd fel a helyeket telephelyként (pl. „Kovács – munkahely”, „Kovács – otthon”), lásd
+   [5.3](#53-telephelyek).
+2. A sofőrnél a **Telephely** legyen az, ahonnan **általában** indul (pl. az otthona).
+3. Kattints az **Időszakos telephely hozzáadása** gombra, jelöld be a **napokat**, add meg az
+   **idősávot**, és válaszd ki, **melyik telephelyen** van a sofőr a buszával ebben az idősávban.
+4. Több idősávot is felvehetsz. Az **X** gombbal törölhetsz egyet.
+
+Hogyan számol vele a program?
+
+- A **kiállás** annál a telephelynél kezdődik, amelyik az **induláskor** érvényes; a
+  **beállás** annál ér véget, amelyik a **visszaérkezéskor**. A kettő lehet különböző: a busz
+  délután a munkahelyről indul, este pedig hazaér.
+- Ha egy idősáv sem érvényes, a fenti **Telephely** számít (ha az sincs, a járműé, végül a klubé).
+- Ha az indulás épp az idősáv vége után van, de a busz onnan már nem érhetne haza időben,
+  akkor onnan indul, ahol az idősáv végén volt. Példa: a sofőr **16:00-ig** dolgozik
+  (idősáv: 00:00–16:00, munkahely), a **16:10-es** induláshoz a busz a **munkahelyről**
+  indul, mert otthonról 16:00 előtt kellett volna elindulnia, amikor a sofőr még a
+  munkahelyén volt. Egy **17:00-s** induláshoz már **otthonról** indul.
+- Az idősáv vége már nem tartozik bele: a 00:00–16:00 sáv 16:00-kor már nem érvényes.
+  Egész napos sávhoz írj 00:00–23:59-et.
+- Hiányosan kitöltött idősávot (nincs nap bejelölve) a program mentéskor elhagy.
+
+> **Példa:** egy sofőr hétfőtől csütörtökig 16:10-ig dolgozik egy irodában, pénteken
+> 13:30-kor végez, és előbb hazamegy. Telephely: **otthon**. Időszakos telephely:
+> **H, K, Sze, Cs, 00:00–16:10, iroda**. Hétfőtől csütörtökig a délutáni fuvar az irodából
+> indul, pénteken otthonról.
 
 ### 5.6 Hely kijelölése a térképen
 
@@ -419,7 +427,7 @@ alapértéken.
 | **Preferált jármű súlya (Ft)** | Mennyire ragaszkodjon a sofőr saját buszához. 0 = nem számít. | 1000 |
 | **Egyenletes terhelés súlya (Ft)** | Mennyire ossza el egyenletesen a munkát a sofőrök között. 0 = csak a költség számít. | 5000 |
 | **Fix sofőr–jármű párosítás** | Bekapcsolva a sofőr **csak a saját (preferált) buszát** kaphatja meg; a program más járművet fel sem ajánl neki. Lásd a táblázat alatti dobozt. | kikapcsolva |
-| **Klub telephelye** | Innen indulnak a buszok, ha a járműnél nincs más megadva. | nincs megadva |
+| **Klub telephelye** | Innen indulnak a buszok, ha sem a sofőrnél, sem a járműnél nincs más megadva. | nincs megadva |
 
 > **Mennyi legyen a kiszállási díj?**
 >
@@ -519,7 +527,7 @@ a pénz csak a műszak **első** láncánál szerepel, a többinél ez áll: „
 - a **feladatok**: ODA vagy VISSZA, csapat, időpont, honnan hova, hány fő, és a megállók időkkel;
 - a feladatok között: **üresjárat** (utas nélküli út) és **várakozás** percben;
 - **beállás** – mikor ér vissza a busz a telephelyre, és melyikre. Időszakos telephelynél
-  ez lehet más, mint ahonnan indult (lásd [5.4](#54-járművek)).
+  ez lehet más, mint ahonnan indult (lásd [5.5](#55-sofőrök)).
 
 **Piros jelzések** a kártyán – ezeket érdemes kijavítani:
 - **Szoros átkötés:** nincs elég idő eljutni az egyik feladattól a következőig.
@@ -852,13 +860,14 @@ Alapból a saját busz csak előny, nem szabály. Ha ragaszkodsz hozzá, kapcsol
 a **Fix sofőr–jármű párosítást** (lásd [7.2](#72-paraméterek-)).
 
 **A busz rossz helyről indul a beosztásban.**
-Nézd meg a járműnél a **Telephely** és az **Időszakos telephely** beállítását. Az idősáv a
+Nézd meg a sofőrnél a **Telephely** és az **Időszakos telephely** beállítását, és ha ott
+nincs megadva, a járműnél a **Telephelyet**. Az idősáv a
 busz **indulási** idejére vonatkozik (amikor elhagyja a telephelyet), nem az első megálló
 idejére.
 
 **Nem tudok törölni egy állomást, járművet vagy helyszínt.**
-Valami még használja. Egy telephelyet az is „használ”, ha csak egy jármű időszakos
-telephelyeként szerepel. A program megírja, hány helyen („Használatban: …”). Előbb onnan vedd ki.
+Valami még használja. Egy telephelyet az is „használ”, ha csak egy sofőr telephelyeként
+vagy időszakos telephelyeként szerepel. A program megírja, hány helyen („Használatban: …”). Előbb onnan vedd ki.
 
 **Nem jelenik meg a térkép.**
 Gyenge vagy tiltott internetkapcsolatnál egyszerűsített térkép jelenik meg. A koordinátát

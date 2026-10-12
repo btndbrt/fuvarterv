@@ -51,8 +51,8 @@ export function MasterScreen({ tab, state, update, notice, setNotice }) {
                       : <AlertTriangle size={14} style={{ color: "var(--warn)" }} aria-label="Hiányzó koordináta" />}</>}
               </div>
               <div className="text-sm" style={{ color: "var(--ink2)" }}>
-                {tab === "vehicles" && `${it.seats} férőhely (sofőr nélkül)${(it.baseRules || []).length ? ` · ${it.baseRules.length} időszakos telephely` : ""}`}
-                {tab === "drivers" && <>{it.phone ? <a href={`tel:${it.phone.replace(/\s/g, "")}`} className="underline">{it.phone}</a> : "nincs telefonszám"}{it.email ? ` · ${it.email}` : ""}</>}
+                {tab === "vehicles" && `${it.seats} férőhely (sofőr nélkül)`}
+                {tab === "drivers" && <>{it.phone ? <a href={`tel:${it.phone.replace(/\s/g, "")}`} className="underline">{it.phone}</a> : "nincs telefonszám"}{it.email ? ` · ${it.email}` : ""}{(it.baseRules || []).length ? ` · ${it.baseRules.length} időszakos telephely` : ""}</>}
                 {(tab === "stations" || tab === "venues" || tab === "bases") && (it.address || "nincs cím")}
                 {it.note ? ` · ${it.note}` : ""}
               </div>
@@ -121,8 +121,8 @@ export function MasterForm({ kind, state, entity, onSave, onCancel }) {
     stations: { name: "", address: "", note: "", lat: null, lon: null },
     venues: { name: "", address: "", note: "", lat: null, lon: null, needsVignette: false },
     bases: { name: "", address: "", note: "", lat: null, lon: null },
-    vehicles: { name: "", plate: "", seats: 8, note: "", hasVignette: false, baseRules: [] },
-    drivers: { name: "", phone: "", email: "", note: "", wage: 3000, minShiftMin: 180, availability: [] },
+    vehicles: { name: "", plate: "", seats: 8, note: "", hasVignette: false },
+    drivers: { name: "", phone: "", email: "", note: "", wage: 3000, minShiftMin: 180, availability: [], baseId: null, baseRules: [] },
   }[kind];
   const [f, setF] = useState(entity || blank);
   const [plateErr, setPlateErr] = useState("");
@@ -144,8 +144,7 @@ export function MasterForm({ kind, state, entity, onSave, onCancel }) {
       const p = normalizePlate(f.plate);
       if (!p) { setPlateErr("A rendszám kötelező."); return; }
       if (plateExists(state, p, entity?.id)) { setPlateErr(`Ez a rendszám már létezik: ${p}`); return; }
-      onSave({ ...f, plate: p, seats: Math.max(1, Number(f.seats) || 1), hasVignette: !!f.hasVignette, baseId: f.baseId || null,
-        baseRules: (f.baseRules || []).filter((w) => completeWindow(w) && w.baseId && w.end > w.start) });
+      onSave({ ...f, plate: p, seats: Math.max(1, Number(f.seats) || 1), hasVignette: !!f.hasVignette, baseId: f.baseId || null });
       return;
     }
     if (kind === "drivers") {
@@ -155,6 +154,8 @@ export function MasterForm({ kind, state, entity, onSave, onCancel }) {
         wage: Math.max(0, Number(f.wage) || 0),
         minShiftMin: Math.max(0, Number(f.minShiftMin) || 0),
         availability: (f.availability || []).filter(completeWindow),
+        baseId: f.baseId || null,
+        baseRules: (f.baseRules || []).filter((w) => completeWindow(w) && w.baseId && w.end > w.start),
       });
       return;
     }
@@ -203,27 +204,11 @@ export function MasterForm({ kind, state, entity, onSave, onCancel }) {
           <Check label="Van országos autópálya-matricája"
             hint="Matricás helyszínre a beosztás csak ilyen járművet oszt be."
             checked={f.hasVignette} onChange={(b) => setF({ ...f, hasVignette: b })} />
-          <Field label="Telephely" hint="Innen indul és ide tér vissza a busz — a fizetett idő ettől a ponttól számít. Ha a sofőr a lakcímén tartja, válaszd azt.">
+          <Field label="Telephely" hint="Innen indul és ide tér vissza a busz, ha a sofőrjének nincs saját telephelye — a fizetett idő ettől a ponttól számít.">
             <select className="inp" value={f.baseId || ""} onChange={(e) => setF({ ...f, baseId: e.target.value || null })}>
               <option value="">— a klub telephelye —</option>
               {state.bases.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
             </select>
-          </Field>
-          <Field label="Időszakos telephely"
-            hint="Ha a busz bizonyos napokon, bizonyos időben máshol áll (pl. a sofőr munkahelyén 16:00-ig), add meg itt. A kiállás annál a telephelynél kezdődik, amelyik az induláskor érvényes, a beállás annál ér véget, amelyik a visszaérkezéskor. Idősávon kívül a fenti telephely számít.">
-            {state.bases.length === 0 ? (
-              <div className="text-sm" style={{ color: "var(--ink2)" }}>Előbb vegyél fel telephelyet az Adatok → Telephelyek fülön.</div>
-            ) : (
-              <WindowList items={f.baseRules || []} onChange={(baseRules) => setF({ ...f, baseRules })}
-                addLabel="Időszakos telephely hozzáadása"
-                blank={() => ({ days: [], start: "00:00", end: "16:00", baseId: state.bases[0].id })}
-                extra={(w, set) => (
-                  <select className="inp" aria-label="Telephely ebben az idősávban" value={w.baseId || ""}
-                    onChange={(e) => set({ baseId: e.target.value || null })}>
-                    {state.bases.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-                  </select>
-                )} />
-            )}
           </Field>
         </>
       )}
@@ -251,6 +236,28 @@ export function MasterForm({ kind, state, entity, onSave, onCancel }) {
           <Field label="Elérhetőség" hint="Ha nincs idősáv megadva, a sofőr bármikor beosztható.">
             <WindowList items={f.availability || []} onChange={(availability) => setF({ ...f, availability })}
               addLabel="Idősáv hozzáadása" blank={() => ({ days: [], start: "15:00", end: "21:00" })} />
+          </Field>
+          <Field label="Telephely" hint="Innen indul és ide tér vissza a sofőr a buszával — bármelyik buszt kapja. Ha nincs megadva, a jármű telephelye számít, ha annak sincs, a klubé.">
+            <select className="inp" aria-label="A sofőr telephelye" value={f.baseId || ""} onChange={(e) => setF({ ...f, baseId: e.target.value || null })}>
+              <option value="">— a jármű telephelye —</option>
+              {state.bases.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+            </select>
+          </Field>
+          <Field label="Időszakos telephely"
+            hint="Ha a sofőr bizonyos napokon, bizonyos időben máshol van a buszával (pl. a munkahelyén 16:00-ig), add meg itt. A kiállás annál a telephelynél kezdődik, amelyik az induláskor érvényes, a beállás annál ér véget, amelyik a visszaérkezéskor. Idősávon kívül a fenti telephely számít.">
+            {state.bases.length === 0 ? (
+              <div className="text-sm" style={{ color: "var(--ink2)" }}>Előbb vegyél fel telephelyet az Adatok → Telephelyek fülön.</div>
+            ) : (
+              <WindowList items={f.baseRules || []} onChange={(baseRules) => setF({ ...f, baseRules })}
+                addLabel="Időszakos telephely hozzáadása"
+                blank={() => ({ days: [], start: "00:00", end: "16:00", baseId: state.bases[0].id })}
+                extra={(w, set) => (
+                  <select className="inp" aria-label="Telephely ebben az idősávban" value={w.baseId || ""}
+                    onChange={(e) => set({ baseId: e.target.value || null })}>
+                    {state.bases.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                  </select>
+                )} />
+            )}
           </Field>
         </>
       )}

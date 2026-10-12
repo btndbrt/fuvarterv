@@ -209,17 +209,19 @@ export function baseOf(state, vehicleId) {
   return (v && v.baseId) || state.settings?.defaultBaseId || null;
 }
 
-/* ---------- Time-dependent depots (vehicle.baseRules) ----------
-   A bus is not always kept in one place: a driver who works at an office until 16:00
-   has it there during the day and at home afterwards. The rules are windows on the
-   vehicle, shaped like a driver's availability:
+/* ---------- Driver depots (driver.baseId, driver.baseRules) ----------
+   The depot goes with the DRIVER: a driver who works at an office until 16:00 has
+   the bus there during the day and at home afterwards, and takes that rhythm to
+   whichever bus they are given. A driver may have one all-day depot and a list of
+   windows shaped like their availability:
 
      baseRules: [{ days: [weekdayIdx], start: "HH:MM", end: "HH:MM", baseId }]
 
    A window is half-open, [start, end): at 16:00 a rule ending at 16:00 no longer
-   applies. Overlapping windows are resolved by list order, first match wins. With no
-   matching rule — and always with no rules at all — the depot is baseOf's, so a
-   vehicle without rules behaves exactly as it did before they existed (E8). */
+   applies. Overlapping windows are resolved by list order, first match wins. Outside
+   every window the depot is the driver's baseId, then the vehicle's (baseOf). A
+   driver with neither — and a run with no registered driver — behaves exactly as it
+   did before driver depots existed (E8). */
 
 /* A window usable for resolution, or null for a half-filled one. An incomplete window
    used to be the reason a driver silently vanished from the day; ignoring it is the
@@ -230,34 +232,42 @@ function ruleSpan(r) {
   return [a, b];
 }
 
-/* Where the rules say the bus is at minute `min` of `weekday`. */
-export function baseAt(state, vehicleId, weekday, min) {
-  const v = byId(state.vehicles, vehicleId);
-  for (const r of v?.baseRules || []) {
-    if (!(r.days || []).includes(weekday)) continue;
+/* The depot outside every window: the driver's own, then the vehicle's. */
+const fallbackBaseOf = (state, u) =>
+  byId(state.drivers, u.driverId)?.baseId || baseOf(state, u.vehicleId);
+
+/* The driver's windows that apply on this weekday, or none without one. */
+function rulesOn(state, u) {
+  if (u.weekday == null) return [];
+  return (byId(state.drivers, u.driverId)?.baseRules || [])
+    .filter((r) => (r.days || []).includes(u.weekday) && ruleSpan(r));
+}
+
+/* Where the run's depot is at minute `min`. `u` names the driver, the vehicle and
+   the weekday — a use, or anything shaped like one. */
+export function baseAt(state, u, min) {
+  for (const r of rulesOn(state, u)) {
     const sp = ruleSpan(r);
-    if (sp && sp[0] <= min && min < sp[1]) return r.baseId;
+    if (sp[0] <= min && min < sp[1]) return r.baseId;
   }
-  return baseOf(state, vehicleId);
+  return fallbackBaseOf(state, u);
 }
 
 /* The weekday cut into stretches over which baseAt is constant, from -Infinity to
    +Infinity so every moment of a use falls into exactly one. Times before midnight or
    past it (a return after 24:00) belong to no window, so they get the fallback. */
-function baseSegments(state, vehicleId, weekday) {
-  const v = byId(state.vehicles, vehicleId);
+function baseSegments(state, u) {
   const cuts = new Set();
-  for (const r of v?.baseRules || []) {
-    if (!(r.days || []).includes(weekday)) continue;
+  for (const r of rulesOn(state, u)) {
     const sp = ruleSpan(r);
-    if (sp) { cuts.add(sp[0]); cuts.add(sp[1]); }
+    cuts.add(sp[0]); cuts.add(sp[1]);
   }
   const pts = [-Infinity, ...[...cuts].sort((a, b) => a - b), Infinity];
   const segs = [];
   for (let i = 0; i < pts.length - 1; i++) {
     const a = pts[i], z = pts[i + 1];
     const probe = a === -Infinity ? (z === Infinity ? 0 : z - 1) : a;
-    segs.push({ a, z, baseId: baseAt(state, vehicleId, weekday, probe) });
+    segs.push({ a, z, baseId: baseAt(state, u, probe) });
   }
   return segs;
 }
@@ -273,25 +283,25 @@ function baseSegments(state, vehicleId, weekday) {
    Usually that departure lies inside the depot's own window. When it does not, it is
    because the window closed before the bus had to leave and the next depot is too far
    to make it in time: "works until 16:00", a 16:10 departure from the office, and home
-   would have meant setting off at 15:40 while the bus was still at the office. It
+   would have meant setting off at 15:40 while the driver was still at the office. It
    then leaves from where it was when the window closed — physically the only place it
    can leave from. Scanning per stretch makes this exact and deterministic: within one
    stretch the depot is fixed, so the latest feasible t is a closed form.
 
-   A use with no weekday (older callers, tests) has no rules to apply, and gets the
-   fallback depot exactly as before. */
-/* No weekday, or a vehicle with no rules: nothing to resolve, and the fallback is the
-   answer. Taking the short way here also keeps the common case as cheap as it was —
-   depotLegs runs inside the assignment search thousands of times. */
-const noRules = (state, u) => u.weekday == null || !(byId(state.vehicles, u.vehicleId)?.baseRules || []).length;
+   A use with no weekday (older callers, tests) has no windows to apply, and gets the
+   fallback depot. */
+/* No windows to resolve: the fallback is the answer. Taking the short way here also
+   keeps the common case as cheap as it was — depotLegs runs inside the assignment
+   search thousands of times. */
+const noRules = (state, u) => !rulesOn(state, u).length;
 
 export function startBaseOf(state, u) {
   if (noRules(state, u)) {
-    const b = baseOf(state, u.vehicleId);
+    const b = fallbackBaseOf(state, u);
     return { baseId: b, depart: u.start - (b ? legMin(state, b, u.from) : 0) };
   }
   let best = null;
-  for (const s of baseSegments(state, u.vehicleId, u.weekday)) {
+  for (const s of baseSegments(state, u)) {
     const depart = u.start - (s.baseId ? legMin(state, s.baseId, u.from) : 0);
     if (depart < s.a) continue;                     // would have to leave before this stretch began
     /* Clipped at the stretch's end, which is exclusive: a departure that only works
@@ -308,11 +318,11 @@ export function startBaseOf(state, u) {
    take it closes before the bus could arrive, it carries on to the next depot. */
 export function endBaseOf(state, u) {
   if (noRules(state, u)) {
-    const b = baseOf(state, u.vehicleId);
+    const b = fallbackBaseOf(state, u);
     return { baseId: b, arrive: u.end + (b ? legMin(state, u.to, b) : 0) };
   }
   let best = null;
-  for (const s of baseSegments(state, u.vehicleId, u.weekday)) {
+  for (const s of baseSegments(state, u)) {
     const arrive = u.end + (s.baseId ? legMin(state, u.to, s.baseId) : 0);
     if (arrive >= s.z) continue;                     // the stretch is over before the bus gets there
     const t = Math.max(arrive, s.a);
@@ -321,10 +331,10 @@ export function endBaseOf(state, u) {
   return { baseId: best.baseId, arrive: best.arrive };
 }
 
-/* Does this vehicle have a depot at any time at all? The Schedule screen warns about
-   vehicles that have none: then paid time silently falls back to the tasks. */
-export const hasAnyBase = (state, vehicle) =>
-  !!baseOf(state, vehicle.id) || (vehicle.baseRules || []).some((r) => ruleSpan(r));
+/* Does this driver bring a depot of their own, at any time at all? Then the bus's
+   depot never matters for their runs. */
+export const driverHasBase = (driver) =>
+  !!driver?.baseId || (driver?.baseRules || []).some((r) => ruleSpan(r));
 
 /* The one bus this driver may be given, or null when any bus will do.
 
@@ -376,12 +386,14 @@ export function deleteGuard(state, kind, id) {
     // settings.defaultBaseId has to be counted too. Delete the club depot and
     // every vehicle is left without one, and paid time silently falls back to
     // being measured from the tasks.
-    // A depot named only in a vehicle's time windows is just as much in use: delete
-    // it and the window points at nothing, so the bus quietly falls back to its
-    // all-day depot at exactly the times the dispatcher said it would not be there.
-    const c = state.vehicles.filter((v) => v.baseId === id || (v.baseRules || []).some((r) => r.baseId === id)).length
+    // A depot that is a driver's, all day or only in a time window, is just as much
+    // in use: delete it and the window points at nothing, so the driver quietly falls
+    // back to the bus's depot at exactly the times the dispatcher said they would not
+    // be there.
+    const c = state.vehicles.filter((v) => v.baseId === id).length
+      + state.drivers.filter((d) => d.baseId === id || (d.baseRules || []).some((r) => r.baseId === id)).length
       + (state.settings?.defaultBaseId === id ? 1 : 0);
-    return n(c, "jármű/beállítás");
+    return n(c, "jármű/sofőr/beállítás");
   }
   if (kind === "drivers") {
     const c = state.rides.filter((r) => r.driverId === id).length + chainRefs(state, "driverId", id);

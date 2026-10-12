@@ -42,7 +42,7 @@ Unless a record says otherwise, the decision is **still in force**.
 | [ADR-29](#adr-29--empty-running-costs-money) | Empty running | optimisation |
 | [ADR-30](#adr-30--one-privileged-function-for-invitations) | Invitations | security |
 | [ADR-31](#adr-31--fixed-driverbus-pairing-is-a-switch-not-a-bigger-bias) | Fixed pairing | optimisation |
-| [ADR-32](#adr-32--a-vehicles-depot-can-depend-on-the-day-and-the-time) | Time-dependent depot | optimisation |
+| [ADR-32](#adr-32--the-depot-goes-with-the-driver-and-can-depend-on-the-day-and-the-time) | Driver depot, time-dependent | optimisation |
 
 ---
 
@@ -667,7 +667,7 @@ per-driver flag would simply default to the club setting.
 `optimizeDay`; the ⚙ panel in `ScheduleScreen`. Tests: `fixed-vehicle.test.js`,
 `fixed-vehicle-ui.test.jsx`.
 
-## ADR-32 — A vehicle's depot can depend on the day and the time
+## ADR-32 — The depot goes with the driver, and can depend on the day and the time
 
 **Context.** A vehicle had one depot (`baseId`, else the club's), and everything priced
 from it — depot runs, paid time (ADR-14), empty running (ADR-29), the chaining stage's
@@ -677,11 +677,24 @@ Monday to Thursday, so the bus starts from the office on those days, but on Frid
 finishes at 13:30 and goes home first. Another works until 16:00 every day: a 16:10
 departure leaves from the workplace, a 17:00 one from home.
 
-**Decision.** The rule lives on the **vehicle**, as a list of weekly windows shaped like
-a driver's availability: `baseRules: [{ days, start, end, baseId }]`. A window is
-half-open, the first match wins, and with no match the depot is `baseId`, then
-`settings.defaultBaseId`. The start depot is resolved when the bus **leaves**, the end
-depot when it **gets back**, and the two may differ.
+**Decision.** The depot belongs to the **driver**, and goes with them to whichever bus
+they drive. A driver gets an all-day `baseId` and a list of weekly windows shaped like
+their availability: `baseRules: [{ days, start, end, baseId }]`. A window is half-open
+and the first match wins. Lookup order for a run: the driver's window, the driver's
+`baseId`, the vehicle's `baseId`, `settings.defaultBaseId`. A run with no registered
+driver (a driverless chain, or a free-text match driver later) starts from the bus's
+depot. The start depot is resolved when the bus **leaves**, the end depot when it
+**gets back**, and the two may differ.
+
+**Why on the driver.** A first version put the windows on the vehicle, on the grounds
+that the bus's whereabouts decide the empty running. The dispatcher overruled that
+(2026-10-12): the cases they describe are about where a person is — at work, at home —
+and with the fixed pairing (ADR-31) the bus is wherever its driver is. It also settles
+two cases the vehicle version left open: two shift partners sharing one bus each keep
+their own rhythm, and a driver given another bus for a day (a match takes theirs) still
+sets off from their own office or home. The model then assumes the bus is wherever its
+driver is; on a swap day, getting the other bus to the driver is the dispatcher's
+concern, not the optimizer's.
 
 **The circularity, and how it is broken.** The departure time depends on the depot (a
 far depot means leaving earlier) and the depot depends on the departure time. The start
@@ -692,41 +705,42 @@ constant depot makes each stretch's answer a closed form, so this is exact and
 deterministic — no iteration, no tie left to chance (E2). It also handles the case a
 naive "look up the rule at the departure time" gets wrong: "until 16:00" with a 16:10
 departure. At 16:10 the rule says home, but leaving home on time meant setting off at
-15:40, while the bus was still at the office; the latest feasible departure is the
+15:40, while the driver was still at the office; the latest feasible departure is the
 office's, which is what the dispatcher described.
-
-**Why on the vehicle.** For the same reason the single depot is (DEVELOPER §7): it is
-the bus's whereabouts that decide the empty running. A rule on the driver would need a
-second resolution when two drivers share a bus, and would say nothing about a bus
-nobody is paired with.
 
 **Consequence.** One resolver feeds every view: `depotLegs` calls `startBaseOf` and
 `endBaseOf`, and `spanOf`, `driverPay`, `emptyRunMin`, `groupByShift`, the chain card,
-the driver sheet and the print sheet all read through it. `homeTripMin` resolves the
-same two ends for the gap between two tasks, so chaining and pay still agree on "could
-the driver get home". Tasks and uses now carry `weekday`, the one input the old single
-depot never needed. `deleteGuard` counts a depot named only in a rule.
+the driver sheet and the print sheet all read through it. Uses already carry the
+driver; they now carry `weekday` too, the one input the old single depot never needed.
+`homeTripMin` runs before any driver or bus is chosen, so it takes the shortest trip
+over every driver and every suitable bus, deduplicating pairs that resolve alike so
+data without driver depots costs what it did. `deleteGuard` counts a depot named by a
+driver. The Schedule screen's "no depot" warning is silent when every driver has one,
+since no run then asks the bus.
 
 **The model trusts the rules.** It does not check that the bus could physically have
 got from where the last shift ended to where the next one starts: the Friday driver
 moving the bus home on his own time is exactly what the rules exist to describe.
 
-**Old data (E8).** `ensureShape` fills `baseRules: []`, and with no rules every
-resolution is `baseOf`'s — the four existing depot test files pass unchanged. A use with
-no `weekday` (any caller written before this) also gets the fallback. An older client
-ignores the field and plans with the all-day depot, which is the behaviour it always
-had.
+**Old data (E8).** `ensureShape` fills `baseId: null, baseRules: []` on drivers, and
+with neither every resolution is `baseOf`'s — the four existing depot test files pass
+unchanged. A use with no `weekday` gets the all-day fallback. An older client ignores
+both fields and plans with the vehicle's depot, which is the behaviour it always had.
 
-**Rejected.** A per-date override ("on 12 March the bus is at X"). Useful for one-offs,
-but the dispatcher's cases are weekly patterns, and dated exceptions are their own
-feature (matches). Weekly windows can gain a dated layer later without changing these.
+**Rejected.** Windows on the vehicle — the first version of this ADR, never merged.
+Same resolution, wrong owner: see "Why on the driver".
+
+**Rejected.** A per-date override ("on 12 March he is at X"). Useful for one-offs, but
+the dispatcher's cases are weekly patterns, and dated exceptions are their own feature
+(matches). Weekly windows can gain a dated layer later without changing these.
 
 **Rejected.** Resolving both ends at the task times rather than at the depot departure
 and arrival. Simpler, since there is no circularity, but it answers a different question
 from the one the dispatcher asks: "for a 16:10 departure, where does the bus leave
 from?" is about when the bus leaves.
 
-**Where.** `baseAt`, `startBaseOf`, `endBaseOf`, `hasAnyBase` in `logic.js`; `depotLegs`,
-`spanOf`, `homeTripMin`, `chainUse`, `rideUse` and `genDayTasks` (`task.weekday`) in
-`optimizer.js`; the window editor in `MasterScreen` (`WindowList`, shared with driver
-availability). Tests: `base-rules.test.js`, `base-rules-ui.test.jsx`.
+**Where.** `baseAt`, `startBaseOf`, `endBaseOf`, `driverHasBase` in `logic.js`;
+`depotLegs`, `spanOf`, `homeTripMin`, `chainUse`, `rideUse` and `genDayTasks`
+(`task.weekday`) in `optimizer.js`; the depot picker and window editor in the driver
+form of `MasterScreen` (`WindowList`, shared with availability). Tests:
+`base-rules.test.js`, `base-rules-ui.test.jsx`.
