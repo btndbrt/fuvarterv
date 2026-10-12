@@ -8,10 +8,10 @@ import { Plus, AlertTriangle, X, ChevronsRight, ChevronDown, Lock, Unlock, Zap, 
 import { DAYS, uid, byId } from "../domain/constants.js";
 import { mondayOf, weekdayIdx, minToTime, fmtDateFull, toISO } from "../domain/datetime.js";
 import { locName, matrixKey, computeMatrix } from "../domain/geo.js";
-import { resolveDay, dayStats, optimizeWeek, withGeneratedRides, handRidesReplaced, driverAvailableFor, driverPay, chainUse, depotLegs, chainShifts } from "../domain/optimizer.js";
+import { resolveDay, dayStats, optimizeWeek, pairingIssue, withGeneratedRides, handRidesReplaced, driverAvailableFor, driverPay, chainUse, depotLegs, chainShifts } from "../domain/optimizer.js";
 import { baseOf } from "../domain/logic.js";
 import { fmtFt, fmtH } from "../ui/format.js";
-import { Field, NumField, Modal, PlateChip, TeamDot, EmptyState, InfoDot, BusyOverlay } from "../ui/base.jsx";
+import { Field, NumField, Check, Modal, PlateChip, TeamDot, EmptyState, InfoDot, BusyOverlay } from "../ui/base.jsx";
 import { VignettePill } from "../ui/VignettePill.jsx";
 import { driversWithWeekWork } from "./PrintSheets.jsx";
 
@@ -23,6 +23,8 @@ export function taskHardIssues(state, weekday, t) {
   if (t.pax > maxSeats) out.push(`Nincs jármű elegendő férőhellyel (${t.pax} fő > ${maxSeats}).`);
   if (!state.drivers.some((d) => driverAvailableFor(d, weekday, t.start, t.end)))
     out.push(`Egyik sofőr sem érhető el ${minToTime(t.start)}–${minToTime(t.end)} között.`);
+  const pairing = pairingIssue(state, weekday, t);
+  if (pairing) out.push(pairing);
   return out;
 }
 
@@ -536,6 +538,11 @@ export function ScheduleScreen({ state, update }) {
             <NumField label="Egyenletes terhelés súlya (Ft)" hint="Mennyire ossza el a munkát egyenletesen a sofőrök között, a fizetett idő alapján. 0 = kikapcsolva, csak a költség számít."
               value={state.settings.fairnessBias} min={0} onCommit={(v) => setSetting("fairnessBias", v)} />
           </div>
+          {/* Placed right under the preference weight it replaces: with the switch on,
+              that weight no longer decides anything for a driver who has a bus. */}
+          <Check label="Fix sofőr–jármű párosítás"
+            hint="Bekapcsolva a sofőr csak a saját (preferált) buszát kaphatja meg, a többi járművet az optimalizálás fel sem ajánlja neki. Akinek nincs saját busza, azt nem érinti; két sofőrnek lehet ugyanaz a busza. Kivételt kézi áthelyezéssel és zárolással tehetsz."
+            checked={state.settings.fixedVehicle} onChange={(v) => setSetting("fixedVehicle", v)} />
           <Field label="Klub telephelye" hint="Innen indulnak a buszok, ha a járműnél nincs saját telephely megadva. A fizetett idő a telephelytől a visszaérkezésig tart.">
             <select className="inp" value={state.settings.defaultBaseId || ""} onChange={(e) => setSetting("defaultBaseId", e.target.value || null)}>
               <option value="">— nincs megadva —</option>

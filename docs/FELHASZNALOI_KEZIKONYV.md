@@ -181,7 +181,7 @@ külön megadhatod (lásd [5.4](#54-járművek)).
 | **Név \*** | A sofőr neve. |
 | **Telefonszám** | A listában erre kattintva fel is hívhatod. |
 | **E-mail (belépéshez)** | Ha a sofőr ezzel a címmel lép be, a Sofőr fülön rögtön a **saját** napja nyílik meg. |
-| **Preferált jármű** | Ha a sofőr általában ugyanazt a buszt vezeti. A program ezt előnyben részesíti, de nem kötelező érvényű. |
+| **Preferált jármű** | Ha a sofőr általában ugyanazt a buszt vezeti. A program ezt előnyben részesíti, de alapból nem kötelező érvényű. Ha a Beosztás fül ⚙ paneljén bekapcsolod a **Fix sofőr–jármű párosítást**, a sofőr csak ezt a buszt kaphatja meg (lásd [7.2](#72-paraméterek-)). |
 | **Órabér (Ft/óra)** | A sofőr órabére. Alapértelmezés: 3000 Ft. |
 | **Min. műszak (perc)** | A legrövidebb idő, amit a klub egy kiállásért kifizet. Alapértelmezés: 180 perc (3 óra). |
 | **Elérhetőség** | Mikor osztható be a sofőr (lásd lent). |
@@ -381,6 +381,7 @@ alapértéken.
 | **Üresjárat költsége (Ft/perc)** | Mennyibe kerül egy perc utas nélküli út (üzemanyag, kopás). Ez tartja vissza a programot attól, hogy feleslegesen hazaküldje a buszt. | 100 Ft/perc |
 | **Preferált jármű súlya (Ft)** | Mennyire ragaszkodjon a sofőr saját buszához. 0 = nem számít. | 1000 |
 | **Egyenletes terhelés súlya (Ft)** | Mennyire ossza el egyenletesen a munkát a sofőrök között. 0 = csak a költség számít. | 5000 |
+| **Fix sofőr–jármű párosítás** | Bekapcsolva a sofőr **csak a saját (preferált) buszát** kaphatja meg; a program más járművet fel sem ajánl neki. Lásd a táblázat alatti dobozt. | kikapcsolva |
 | **Klub telephelye** | Innen indulnak a buszok, ha a járműnél nincs más megadva. | nincs megadva |
 
 > **Mennyi legyen a kiszállási díj?**
@@ -396,6 +397,24 @@ alapértéken.
 > - **Nagyobb érték** → több láncolás: kevesebb sofőr, de többet várnak.
 > - **Kisebb érték** → kevesebb várakozás, de több kiállás.
 > - **0** → a program egyáltalán nem láncol, minden feladat külön kiállás lesz.
+
+> **Fix sofőr–jármű párosítás – mikor kapcsold be?**
+>
+> Ha a sofőrök a saját buszukkal járnak (otthon tartják, ők felelnek érte), és nem szeretnéd,
+> hogy a program buszt cseréljen köztük. Kikapcsolva a **Preferált jármű súlya** csak „kérés”:
+> ha egy cserével elég sokat lehet spórolni, a program mégis cserél. Bekapcsolva ez **szabály**:
+>
+> - akinek van **preferált járműve**, az csak azt kaphatja meg;
+> - akinek **nincs**, azt nem érinti – ő bármelyik buszt viheti;
+> - két sofőrnek lehet **ugyanaz** a busza (váltásban vezetik), ez továbbra is működik –
+>   egyszerre persze csak egyikük viheti;
+> - a **zárolás** erősebb: ha kézzel áthelyezel egy feladatot egy sofőrhöz egy másik busszal
+>   (vagy zárolsz egy ilyen láncot), az így marad. Kivételt tehát így tudsz tenni. A program
+>   ilyen kivételes lánchoz nem fűz hozzá újabb feladatot.
+>
+> Ha emiatt egy feladatot senki nem vihet, a **Fedetlen feladatok** között a magyarázat
+> „Fix sofőr–jármű párosítás” kezdetű, és megnevezi, kinek melyik busza miért nem jó
+> (pl. kevés a férőhely, vagy nincs matricája).
 
 ### 7.3 Mátrix – pontos utazási idők
 
@@ -519,6 +538,9 @@ visz. Pirossal ott a **magyarázat**, például:
 - „Nincs jármű elegendő férőhellyel” – nagyobb busz kell, vagy több buszra kell bontani
   (adj meg megállónkénti létszámot).
 - „Egyik sofőr sem érhető el …” – bővítsd a sofőrök elérhetőségét.
+- „Fix sofőr–jármű párosítás: …” – be van kapcsolva a fix párosítás, és az elérhető sofőrök
+  saját busza nem alkalmas (vagy foglalt). Kapcsold ki a ⚙ panelben, adj meg egy sofőrt
+  preferált jármű nélkül, vagy helyezd át kézzel a feladatot.
 
 A fedetlen feladatot az **Áthelyezés** gombbal kézzel is beoszthatod.
 
@@ -786,6 +808,10 @@ Vagy a Beosztás fülön zárold a feladatot, illetve a láncot.
 **Egy sofőr sokkal több munkát kap, mint a többiek.**
 - Nézd meg az elérhetőségét: aki szinte mindig ráér, az több munkát kaphat.
 - A **Paraméterekben** növeld az **Egyenletes terhelés súlyát**.
+
+**A program más buszt ad a sofőrnek, mint a sajátja.**
+Alapból a saját busz csak előny, nem szabály. Ha ragaszkodsz hozzá, kapcsold be a ⚙ panelben
+a **Fix sofőr–jármű párosítást** (lásd [7.2](#72-paraméterek-)).
 
 **Nem tudok törölni egy állomást, járművet vagy helyszínt.**
 Valami még használja. A program megírja, hány helyen („Használatban: …”). Előbb onnan vedd ki.

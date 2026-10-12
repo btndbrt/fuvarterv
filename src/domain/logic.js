@@ -209,6 +209,25 @@ export function baseOf(state, vehicleId) {
   return (v && v.baseId) || state.settings?.defaultBaseId || null;
 }
 
+/* The one bus this driver may be given, or null when any bus will do.
+
+   Only with settings.fixedVehicle on, and only for a driver whose preferred bus
+   still exists. A dangling preferredVehicleId (older data; deleteGuard prevents new
+   ones) pinned to nothing would make the driver unusable for good with no way to see
+   why, so it reads as "no preference" — the same thing the soft bias already does
+   with it, since every bus then carries the same penalty.
+
+   Two drivers may share one bus: nothing here is exclusive. The usual clash check
+   is what keeps them off it at the same time. */
+export function fixedVehicleOf(state, driver) {
+  if (!state.settings?.fixedVehicle || !driver?.preferredVehicleId) return null;
+  return byId(state.vehicles, driver.preferredVehicleId) ? driver.preferredVehicleId : null;
+}
+export const vehicleAllowedFor = (state, driver, vehicleId) => {
+  const fixed = fixedVehicleOf(state, driver);
+  return !fixed || fixed === vehicleId;
+};
+
 export function deleteGuard(state, kind, id) {
   const n = (c, w) => (c > 0 ? `Használatban: ${c} ${w}.` : null);
   if (kind === "stations") {
