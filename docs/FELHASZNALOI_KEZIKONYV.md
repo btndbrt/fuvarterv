@@ -255,6 +255,9 @@ Hogyan számol vele a program?
   (idősáv: 00:00–16:00, munkahely), a **16:10-es** induláshoz a busz a **munkahelyről**
   indul, mert otthonról 16:00 előtt kellett volna elindulnia, amikor a sofőr még a
   munkahelyén volt. Egy **17:00-s** induláshoz már **otthonról** indul.
+- Az idősáv vége után a program **hozzászámolja a hazautat**: ha a sofőr 15:30-ig
+  dolgozik, és az otthona 41 percre van, akkor 16:11 előtt nem indulhat otthonról, addig
+  a munkahelyéről indul.
 - Az idősáv vége már nem tartozik bele: a 00:00–16:00 sáv 16:00-kor már nem érvényes.
   Egész napos sávhoz írj 00:00–23:59-et.
 - Hiányosan kitöltött idősávot (nincs nap bejelölve) a program mentéskor elhagy.

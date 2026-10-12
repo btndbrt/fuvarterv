@@ -272,6 +272,34 @@ function baseSegments(state, u) {
   return segs;
 }
 
+/* The stretches a run may START from. Leaving a window takes time: "at work until
+   15:30" with home 41 minutes away means he is at home from 16:11, not from 15:30, and
+   in between the bus can only set off from work. So where a window ENDS and the depot
+   changes, the next depot only begins once the driver could have driven there. A
+   window's start is not moved — "at work from 12:00" means he is there at 12:00 — and
+   neither is anything about where a run ends: the bus goes straight wherever it goes.
+   Found on live data, where the model had a driver set off from home two minutes after
+   leaving work 41 minutes away. */
+function startSegments(state, u) {
+  const rules = rulesOn(state, u);
+  const out = [];
+  for (const seg of baseSegments(state, u)) {
+    const prev = out[out.length - 1];
+    if (!prev) { out.push({ ...seg }); continue; }
+    if (prev.baseId === seg.baseId) { prev.z = seg.z; continue; }
+    /* Only where a window hands over to the depot outside the windows. When another
+       window starts at that minute, it says he is already there. */
+    const windowEnds = rules.some((r) => ruleSpan(r)[1] === seg.a && r.baseId === prev.baseId)
+      && !rules.some((r) => ruleSpan(r)[0] === seg.a && r.baseId === seg.baseId);
+    const drive = windowEnds && prev.baseId && seg.baseId ? legMin(state, prev.baseId, seg.baseId) : 0;
+    const from = Math.min(seg.a + drive, seg.z);
+    prev.z = from;
+    if (from < seg.z) out.push({ ...seg, a: from });
+    else prev.z = seg.z;           // he never gets there before the next change
+  }
+  return out;
+}
+
 /* The depot a use STARTS from, and when the bus leaves it.
 
    The depot depends on the departure time and the departure time on the depot (it is
@@ -301,7 +329,7 @@ export function startBaseOf(state, u) {
     return { baseId: b, depart: u.start - (b ? legMin(state, b, u.from) : 0) };
   }
   let best = null;
-  for (const s of baseSegments(state, u)) {
+  for (const s of startSegments(state, u)) {
     const depart = u.start - (s.baseId ? legMin(state, s.baseId, u.from) : 0);
     if (depart < s.a) continue;                     // would have to leave before this stretch began
     /* Clipped at the stretch's end, which is exclusive: a departure that only works

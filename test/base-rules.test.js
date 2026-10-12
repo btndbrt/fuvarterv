@@ -138,6 +138,42 @@ describe("the dispatcher's case: works until 16:00 every day", () => {
   });
 });
 
+describe("leaving a window takes the drive to the next depot", () => {
+  /* "At work until 16:00" does not put the driver at home at 16:00: home is a drive
+     away, 32 minutes in this fixture. Before that the run can only start from work.
+     Found on live data: work until 15:30, home 41 minutes away, and the model had him
+     set off from home at 15:32. */
+  const s = makeState({ baseRules: untilFour });
+  const commute = legMin(s, "hWORK", "hHOME");
+  const fromWork = legMin(s, "hWORK", "sA"), fromHome = legMin(s, "hHOME", "sA");
+  const atHome = timeToMin("16:00") + commute;
+
+  test("the fixture has a real drive home", () => {
+    expect(commute).toBeGreaterThan(20);
+  });
+
+  test("he cannot set off from home before he could have got there", () => {
+    const u = occ(MON, timeToMin("16:20") + fromHome, timeToMin("18:30"));
+    expect(startBaseOf(s, u)).toEqual({ baseId: "hWORK", depart: u.start - fromWork });
+  });
+
+  test("once he could have got home, he sets off from home", () => {
+    const u = occ(MON, atHome + 3 + fromHome, timeToMin("19:00"));
+    expect(startBaseOf(s, u)).toEqual({ baseId: "hHOME", depart: atHome + 3 });
+  });
+
+  test("where a run ends is unchanged: after the window the bus goes straight home", () => {
+    const u = occ(MON, timeToMin("15:00"), timeToMin("16:10"));
+    expect(endBaseOf(s, u).baseId).toBe("hHOME");
+  });
+
+  test("a window's start is unchanged: at work from 12:00 means there at 12:00", () => {
+    const noon = makeState({ baseRules: [{ days: ALL_DAYS, start: "12:00", end: "16:00", baseId: "hWORK" }] });
+    const u = occ(MON, timeToMin("12:05") + fromWork, timeToMin("13:00"));
+    expect(startBaseOf(noon, u)).toEqual({ baseId: "hWORK", depart: timeToMin("12:05") });
+  });
+});
+
 describe("start depot resolution", () => {
   test("two consistent depots: the later departure wins", () => {
     /* Both depots are valid all day for this departure: the home rule covers the early

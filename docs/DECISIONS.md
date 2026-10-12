@@ -721,6 +721,15 @@ driver. The Schedule screen's "no depot" warning names **drivers**, not buses
 (`driversWithoutBase`): a driver is covered by a depot or windows of their own, by the
 club's, or — until the move below — by an old depot on every bus they could be given.
 
+**Leaving a window takes the drive.** "At work until 15:30" does not put the driver at
+home at 15:30: for the start depot, where a window hands over to the depot outside the
+windows, that depot only begins once he could have driven there (`startSegments`:
+window end + `legMin` between the two). Until then a run can only set off from the
+window's depot. Found on live data: home 41 minutes from work, and the model had him set
+off from home at 15:32. A window's start is not moved ("at work from 12:00" means he is
+there at 12:00), and neither is the end depot — after the window the bus goes straight
+wherever it goes.
+
 **The model trusts the rules.** It does not check that the bus could physically have
 got from where the last shift ended to where the next one starts: the Friday driver
 moving the bus home on his own time is exactly what the rules exist to describe.

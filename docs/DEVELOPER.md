@@ -905,6 +905,12 @@ leaving home on time would have meant setting off at 15:40, while the driver was
 at the office. A use with no `weekday` gets the all-day fallback, so callers that
 predate the rules behave exactly as before.
 
+For the **start** only, leaving a window takes the drive (`startSegments`): where a
+window ends and the depot falls back to the one outside the windows, that depot begins
+at window end + the drive between the two. "At work until 15:30", home 41 minutes away:
+home from 16:11, and a run before that sets off from work. A window's start, and the
+end depot, are not shifted.
+
 **Preferred-vehicle bias (soft preference).** On top of `base`, if the driver has a
 `preferredVehicleId` and this vehicle is a *different* one, we add
 `settings.preferredBias` (default 1000 Ft) as a penalty:
